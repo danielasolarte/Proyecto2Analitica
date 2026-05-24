@@ -4,214 +4,54 @@ import plotly.express as px
 import pandas as pd
 from dash import dash_table
 import numpy as np
-import statsmodels.api as sm
-from statsmodels.stats.outliers_influence import variance_inflation_factor
-
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
-from sklearn.preprocessing import StandardScaler
-
-import statsmodels.formula.api as smf  
-
+import joblib
+import keras
 
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
 
-#cargar datos
-
-df = pd.read_csv("df_limpio.csv")
 # ======================================================
-# PREP PREGUNTA 1 (Educación padres vs puntaje, controlando estrato)
+# CARGAR DATOS Y MODELOS
 # ======================================================
 
-cols_p1 = ["FAMI_EDU_PADRES_SUM", "PUNT_GLOBAL", "FAMI_ESTRATOVIVIENDA"]
-df_p1 = df[cols_p1].dropna().copy()
+df = pd.read_csv("df_modelo_preg1.csv")
 
-# Si tu estrato quedó como int, lo convertimos a etiqueta legible
-# (si ya lo manejas como string tipo "Estrato 1", esto igual funciona)
-df_p1["FAMI_ESTRATOVIVIENDA"] = df_p1["FAMI_ESTRATOVIVIENDA"].astype(int)
-df_p1["ESTRATO_LABEL"] = df_p1["FAMI_ESTRATOVIVIENDA"].apply(lambda x: f"Estrato {x}")
+df['ES_PRIVILEGIADO']   = ((df['COLE_BILINGUE_NUM'] == 1) & (df['COLE_AREA_UBICACION_NUM'] == 0)).astype(int)
+df['JORNADA_EXTENDIDA'] = ((df['COLE_JORNADA_COMPLETA'] == 1) | (df['COLE_JORNADA_UNICA'] == 1)).astype(int)
+df['COLEGIO_NO_MIXTO']  = ((df['COLE_GENERO_FEMENINO'] == 1) | (df['COLE_GENERO_MASCULINO'] == 1)).astype(int)
+df['COLEGIO_TOP']       = ((df['ES_PRIVILEGIADO'] == 1) & (df['JORNADA_EXTENDIDA'] == 1)).astype(int)
 
-# Categorías como en tu notebook: Baja / Media / Alta
-df_p1["EDU_PADRES_CAT"] = pd.cut(
-    df_p1["FAMI_EDU_PADRES_SUM"],
-    bins=[-1, 6, 12, 20],
-    labels=["Baja", "Media", "Alta"]
-)
+model_base_p1 = keras.models.load_model("modelo1base.keras")
+model_opt_p1  = keras.models.load_model("modelo2opt.keras")
+scaler_p1     = joblib.load("scaler_preg1.pkl")
 
-# Orden para que salga bien en el eje
-df_p1["EDU_PADRES_CAT"] = pd.Categorical(
-    df_p1["EDU_PADRES_CAT"],
-    categories=["Baja", "Media", "Alta"],
-    ordered=True
-)
+CARACTERISTICAS_P1 = [c for c in [
+    'COLE_AREA_UBICACION_NUM',
+    'COLE_BILINGUE_NUM',
+    'COLE_GENERO_FEMENINO',
+    'COLE_GENERO_MASCULINO',
+    'COLE_GENERO_MIXTO',
+    'COLE_JORNADA_COMPLETA',
+    'COLE_JORNADA_MAÑANA',
+    'COLE_JORNADA_NOCHE',
+    'COLE_JORNADA_SABATINA',
+    'COLE_JORNADA_TARDE',
+    'COLE_JORNADA_UNICA',
+    'ES_PRIVILEGIADO',
+    'JORNADA_EXTENDIDA',
+    'COLEGIO_NO_MIXTO',
+    'COLEGIO_TOP',
+] if c in df.columns]
 
-estratos_disponibles_p1 = sorted(df_p1["ESTRATO_LABEL"].unique(), key=lambda s: int(s.split()[-1]))
-#modelo de regresión pregunta 2
+stats_p1 = df["PUNT_MATEMATICAS"].describe().reset_index()
+stats_p1.columns = ["Estadística", "Valor"]
+stats_p1["Valor"] = stats_p1["Valor"].round(2)
 
-
-modelo = smf.ols(
-    'PUNT_GLOBAL ~ FAMI_TIENECOMPUTADOR + FAMI_TIENEINTERNET + C(FAMI_ESTRATOVIVIENDA)',
-    data=df
-).fit()
-
-resumen_modelo = modelo.summary().as_text()
-
-# Quitar nulos importantes
-df = df.dropna(subset=["PUNT_GLOBAL", "FAMI_ESTRATOVIVIENDA", "COLE_MCPIO_UBICACION"])
-
-df["FAMI_ESTRATOVIVIENDA"] = df["FAMI_ESTRATOVIVIENDA"].astype(int)
-
-#para la tabla de estadisticas
-stats_df = df["PUNT_GLOBAL"].describe().reset_index()
-stats_df.columns = ["Estadística", "Valor"]
-stats_df["Valor"] = stats_df["Valor"].round(2)
-
-# Opcional: redondear
-stats_df["Valor"] = stats_df["Valor"].round(2)
-
-# # ======================================================
-# # PREGUNTA 3 — Helpers y validación de columnas (antes del layout)
-# # ======================================================
-
-# # Variables candidatas (solo se mostrarán las que existan)
-# P3_CULTURE_CANDIDATES = [
-#     ("Educación máxima del hogar", "EDU_MAX_HOGAR"),
-#     ("Educación madre", "FAMI_EDUCACIONMADRE"),
-#     ("Educación padre", "FAMI_EDUCACIONPADRE"),
-# ]
-
-# P3_ECON_CANDIDATES = [
-#     ("Estrato", "FAMI_ESTRATOVIVIENDA"),
-#     ("Índice de bienes del hogar", "INDICE_ECON"),
-# ]
-
-# def _p3_existing_options(candidates):
-#     """Devuelve options Dash solo con columnas existentes."""
-#     opts = []
-#     for label, col in candidates:
-#         if col in df.columns:
-#             opts.append({"label": label, "value": col})
-#     return opts
-
-# P3_CULTURE_OPTIONS = _p3_existing_options(P3_CULTURE_CANDIDATES)
-# P3_ECON_OPTIONS = _p3_existing_options(P3_ECON_CANDIDATES)
-
-# # Defaults razonables (si existen)
-# P3_DEFAULT_CULTURE = "EDU_MAX_HOGAR" if "EDU_MAX_HOGAR" in df.columns else P3_CULTURE_OPTIONS[0]["value"]
-# P3_DEFAULT_ECON = "FAMI_ESTRATOVIVIENDA" if "FAMI_ESTRATOVIVIENDA" in df.columns else P3_ECON_OPTIONS[0]["value"]
-
-# def _p3_make_mean_line(df_in, xvar, title, xlabel):
-#     g = df_in.groupby(xvar)["PUNT_GLOBAL"].mean().reset_index().sort_values(xvar)
-#     fig = px.line(g, x=xvar, y="PUNT_GLOBAL", markers=True, title=title)
-#     fig.update_layout(template="simple_white", xaxis_title=xlabel, yaxis_title="Puntaje global promedio")
-#     return fig
-
-# def _p3_group_edu(series):
-#     # Bins del notebook: Bajo (0-2), Medio (3-6), Alto (7-10)
-#     s = series.astype(float)
-#     return pd.cut(s, bins=[-1, 2, 6, 10], labels=["Bajo (0-2)", "Medio (3-6)", "Alto (7-10)"])
-
-# def _p3_group_econ(series, econ_var):
-#     s = series.astype(float)
-#     if econ_var == "FAMI_ESTRATOVIVIENDA":
-#         return pd.cut(s, bins=[0.5, 2.5, 4.5, 6.5], labels=["Bajo (1-2)", "Medio (3-4)", "Alto (5-6)"])
-#     # INDICE_ECON típico 0-4: Bajo (0-1), Medio (2-3), Alto (4+)
-#     return pd.cut(s, bins=[-1, 1.5, 3.5, 99], labels=["Bajo (0-1)", "Medio (2-3)", "Alto (4+)"])
-
-# def _p3_make_heatmaps(df_in, cultura_var, econ_var):
-#     df_aux = df_in.copy()
-#     df_aux["EDU_G"] = _p3_group_edu(df_aux[cultura_var])
-#     df_aux["ECO_G"] = _p3_group_econ(df_aux[econ_var], econ_var)
-
-#     hm_mean = df_aux.pivot_table(index="ECO_G", columns="EDU_G", values="PUNT_GLOBAL", aggfunc="mean")
-#     hm_n = df_aux.pivot_table(index="ECO_G", columns="EDU_G", values="PUNT_GLOBAL", aggfunc="count")
-
-#     fig_mean = px.imshow(hm_mean, text_auto=".1f", aspect="auto",
-#                          title="Mapa de calor (promedio): Puntaje por Economía × Cultura")
-#     fig_mean.update_layout(template="simple_white", xaxis_title="Cultura (grupo)", yaxis_title="Economía (grupo)")
-
-#     fig_n = px.imshow(hm_n, text_auto=True, aspect="auto",
-#                       title="Mapa de calor (N observaciones): tamaño muestral por celda")
-#     fig_n.update_layout(template="simple_white", xaxis_title="Cultura (grupo)", yaxis_title="Economía (grupo)")
-
-#     return fig_mean, fig_n
-
-# def _p3_compute_models(df_in, test_size=0.2, random_state=42):
-#     # Columnas “core” según tu notebook (cultura + economía + puntaje)
-#     required = ["PUNT_GLOBAL", "EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]
-#     dfm = df_in.dropna(subset=[c for c in required if c in df_in.columns]).copy()
-
-#     X_cul = dfm[["EDU_MAX_HOGAR"]].astype(float)
-#     X_eco = dfm[["FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]].astype(float)
-#     X_all = dfm[["EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]].astype(float)
-#     y = dfm["PUNT_GLOBAL"].astype(float)
-
-#     # Split consistente (mismas filas para todos los modelos)
-#     idx = np.arange(len(dfm))
-#     idx_tr, idx_te = train_test_split(idx, test_size=test_size, random_state=random_state)
-
-#     m_cul = LinearRegression().fit(X_cul.iloc[idx_tr], y.iloc[idx_tr])
-#     m_eco = LinearRegression().fit(X_eco.iloc[idx_tr], y.iloc[idx_tr])
-#     m_all = LinearRegression().fit(X_all.iloc[idx_tr], y.iloc[idx_tr])
-
-#     r2_cul = r2_score(y.iloc[idx_te], m_cul.predict(X_cul.iloc[idx_te]))
-#     r2_eco = r2_score(y.iloc[idx_te], m_eco.predict(X_eco.iloc[idx_te]))
-#     r2_all = r2_score(y.iloc[idx_te], m_all.predict(X_all.iloc[idx_te]))
-
-#     tabla_r2 = pd.DataFrame({
-#         "Modelo": ["Cultural", "Económico (estrato + bienes)", "Conjunto"],
-#         "R2_test": [r2_cul, r2_eco, r2_all]
-#     }).round(4)
-
-#     delta_cul = r2_all - r2_eco
-#     delta_eco = r2_all - r2_cul
-
-#     r2_parcial_c = (r2_all - r2_eco) / (1 - r2_eco) if (1 - r2_eco) != 0 else np.nan
-#     r2_parcial_e = (r2_all - r2_cul) / (1 - r2_cul) if (1 - r2_cul) != 0 else np.nan
-
-#     tabla_marginal = pd.DataFrame({
-#         "Métrica": [
-#             "ΔR2 (Cultura agregado a Económico)",
-#             "ΔR2 (Economía agregado a Cultural)",
-#             "R2 parcial Cultura",
-#             "R2 parcial Economía",
-#         ],
-#         "Valor": [delta_cul, delta_eco, r2_parcial_c, r2_parcial_e]
-#     }).round(4)
-
-#     # Betas estandarizados (modelo conjunto)
-#     scX = StandardScaler()
-#     scY = StandardScaler()
-#     Xz = scX.fit_transform(X_all.values)
-#     yz = scY.fit_transform(y.values.reshape(-1, 1)).ravel()
-
-#     Xz_tr, Xz_te, yz_tr, yz_te = train_test_split(Xz, yz, test_size=test_size, random_state=random_state)
-#     mz = LinearRegression().fit(Xz_tr, yz_tr)
-
-#     tabla_beta = pd.DataFrame({
-#         "Variable": ["EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"],
-#         "Coef_estandarizado": mz.coef_
-#     }).sort_values("Coef_estandarizado", ascending=False).round(4)
-
-#     # VIF (colinealidad)
-#     X_vif = sm.add_constant(X_all)
-#     tabla_vif = pd.DataFrame({
-#         "Variable": X_vif.columns,
-#         "VIF": [variance_inflation_factor(X_vif.values, i) for i in range(X_vif.shape[1])]
-#     }).round(3)
-
-#     # Solapamiento: cuánto EDU_MAX explica estrato (como en tu notebook)
-#     reg_aux = LinearRegression().fit(dfm[["EDU_MAX_HOGAR"]].astype(float), dfm["FAMI_ESTRATOVIVIENDA"].astype(float))
-#     r2_overlap = reg_aux.score(dfm[["EDU_MAX_HOGAR"]].astype(float), dfm["FAMI_ESTRATOVIVIENDA"].astype(float))
-
-#     return tabla_r2, tabla_marginal, tabla_beta, tabla_vif, float(r2_overlap)
-# ==============================
+# ======================================================
 # LAYOUT
-# ==============================
+# ======================================================
 
 app.layout = html.Div([
 
@@ -220,910 +60,637 @@ app.layout = html.Div([
         style={'textAlign': 'center'}
     ),
 
-    dcc.Tabs(value="tab-proyecto", children=[
+    dcc.Tabs(value="tab-proyecto",style={"fontSize": "18px"}, children=[
 
         # ======================================================
-        # =================== NUESTRO PROYECTO ==================
+        # PESTAÑA: NUESTRO PROYECTO 
         # ======================================================
-
         dcc.Tab(label="Nuestro Proyecto", value="tab-proyecto", children=[
 
             html.Br(),
-            html.H3("Nuestro Proyecto"),
 
-            html.H4("Introducción"),
-            html.P(
-                "Este proyecto desarrolla un tablero de analítica de datos en Dash, desplegado en la nube, "
-                "que permite al DNP analizar los determinantes del desempeño académico en las pruebas Saber 11 "
-                "en el departamento de Cundinamarca."
-            ),
-
-            html.Br(),
-
-            html.H4("Usuario final"),
-            html.P([html.Strong("DNP"), " (Departamento Nacional de Planeación)"]),
-
-            html.Br(),
-
-            html.H4("Integrantes del grupo"),
-            html.Ul([
-                html.Li("Daniela Solarte"),
-                html.Li("Diego Galvan"),
-                html.Li("Isabella Gomez"),
-            ]),
-
-            html.Br(),
-
-            html.H4("Objetivo"),
-            html.P("El objetivo es proporcionar evidencia cuantitativa que apoye:"),
-            html.Ul([
-                html.Li("La formulación de políticas públicas educativas"),
-                html.Li("La focalización de inversión social"),
-                html.Li("El diseño de estrategias para reducir brechas educativas territoriales y socioeconómicas"),
-                html.Li("La priorización de intervenciones en capital humano y transformación digital"),
-            ]),
-
-            html.Br(),
-
-            html.H4("Dimensiones analizadas"),
-            html.P("El análisis se enfoca en tres dimensiones clave:"),
-            html.Ul([
-                html.Li("Eduación de Padres/Capital Cultural"),
-                html.Li("Capital económico del hogar, y estrato socioeconómico"),
-                html.Li("Acceso a tecnología (brecha digital)"),
-            ]),
-
-            html.Br(),
-
-            html.H4("Preguntas de negocio"),
-            html.Ul([
-                html.Li([
-                    "¿Cómo influye el nivel educativo de los padres en el desarrollo de competencias críticas "
-                    "independientemente del estrato socioeconómico? ",
-                    html.Em("(Isabella)")
-                ]),
-                html.Li([
-                    "¿En qué medida el acceso a computador e internet en el hogar explica las diferencias en el puntaje global, "
-                    "una vez considerado el estrato socioeconómico? ",
-                    html.Em("(Daniela)")
-                ]),
-                html.Li([
-                    "¿Qué dimensión del capital familiar tiene mayor poder explicativo sobre el desempeño en Saber 11: cultural o económico? "
-                    "Entendiendo, Cultural como la educación, y ecónomico, como diversos factores materiales, y ",
-                    html.Em("(Diego)")
-                ]),
-            ]),
-
-            html.Br(),
-
-            html.H4("Relevancia para el DNP"),
-            html.P("Este análisis permite identificar:"),
-            html.Ul([
-                html.Li("Qué tipo de capital tiene mayor peso estructural"),
-                html.Li("Si distintas áreas responden a diferentes determinantes"),
-                html.Li("Dónde deben focalizarse las intervenciones según tipo de competencia"),
-            ]),
-
-            html.Br(),
-            html.H4("Mapa de Puntaje Promedio por Municipio"),
-
-            dcc.Graph(
-                figure=px.scatter_geo(
-                    df_mcpio,
-                    locations="ubicacion",
-                    locationmode="country names",
-                    size="PUNT_GLOBAL",
-                    color="PUNT_GLOBAL",
-                    color_continuous_scale="Blues",
-                    projection="natural earth",
-                    title="Promedio Puntaje Global por Municipio"
-                ).update_layout(
-                    geo=dict(
-                        scope="south america",
-                        showland=True,
-                        landcolor="rgb(243, 243, 243)",
-                    ),
-                    margin={"r":0,"t":40,"l":0,"b":0}
-                )
-            )
-
-        ]),
-
-        # ======================================================
-        # =================== PREGUNTA 1 ========================
-        # ======================================================
-
-            
-dcc.Tab(label="Pregunta 1", value="tab-1", children=[
-
-    html.Br(),
-    html.H3("Análisis Pregunta 1"),
-
-    html.Strong(
-        "¿Cómo influye el nivel educativo de los padres en el desempeño (Puntaje Global), "
-        "independientemente del estrato socioeconómico?"
-    ),
-
-    html.Br(), html.Br(),
-
-    html.Div([
-        html.Label("Seleccione estratos a incluir:"),
-        dcc.Dropdown(
-            id="p1-estratos",
-            options=[{"label": e, "value": e} for e in estratos_disponibles_p1],
-            value=estratos_disponibles_p1,   # por defecto: todos
-            multi=True,
-            clearable=False
-        )
-    ], style={"width": "60%"}),
-
-    html.Br(),
-
-    html.Div([
-        dcc.Graph(id="p1-violin")
-    ]),
-
-    html.Br(),
-
-    html.Div([
-        dcc.Graph(id="p1-heatmap")
-    ]),
-
-    html.Br(),
-    html.H4("Modelo de regresión (controlando por estrato)"),
-
-    html.P(
-        "Se estima un modelo lineal para aislar el efecto de la educación parental "
-        "sobre el puntaje global, controlando por estrato."
-    ),
-
-    html.Div([
-        # IZQUIERDA: resumen modelo
-        html.Div([
-            html.H4("Resultados del modelo", style={"marginBottom": "15px"}),
-
-            html.Pre(
-                id="p1-reg-summary",
-                style={
-                    "whiteSpace": "pre-wrap",
-                    "fontSize": "14px",
-                    "lineHeight": "1.6",
-                    "backgroundColor": "#f2f2f2",
-                    "padding": "25px",
-                    "borderRadius": "12px",
-                    "boxShadow": "0 4px 12px rgba(0,0,0,0.08)",
-                    "overflowX": "auto",
-                    "border": "1px solid #e0e0e0"
-                }
-            )
-        ], style={"flex": "2"}),
-
-        # DERECHA: fórmula + espacio para explicación
-        html.Div([
-            html.Div(
-                "Puntaje Global = β₀ + β₁(Educación padres) + β₂(Estrato) + ε",
-                style={
-                    "fontSize": "20px",
-                    "fontWeight": "bold",
-                    "textAlign": "center",
-                    "padding": "20px",
-                    "backgroundColor": "white",
-                    "borderRadius": "10px",
-                    "boxShadow": "0 4px 12px rgba(0,0,0,0.05)"
-                }
-            ),
-
+            # =========================================
+            # BLOQUE SUPERIOR: TEXTO + MAPA (CARD)
+            # =========================================
             html.Div([
-                html.H5("Interpretación (por escribir)", style={"marginTop": "15px"}),
-                html.Div(
-                    "• [Espacio para 2–4 bullets clave orientados al DNP: hallazgo principal, "
-                    "matiz importante, implicación de política, y limitación.]",
-                    style={"lineHeight": "1.7"}
-                ),
+
+                # TEXTO (IZQUIERDA)
+                html.Div([
+                    html.H3("Introducción", style={"fontSize": "26px", "marginBottom": "10px"}),
+                    html.P(
+                        "Este proyecto presenta el desarrollo de un tablero de analítica interactivo orientado al análisis " \
+                        "del desempeño académico en las pruebas Saber 11 en el departamento de Cundinamarca. A partir de datos " \
+                        "oficiales del ICFES, se construyeron modelos predictivos basados en redes neuronales con el objetivo de " \
+                        "identificar patrones y factores asociados al rendimiento de los estudiantes.",
+                        style={"fontSize": "18px", "lineHeight": "1.6"}
+                    ),
+
+                    html.Br(),
+
+                    html.H4("Integrantes del Equipo", style={"marginBottom": "10px"}),
+
+                    html.Ul([
+                        html.Li("Daniela Solarte"),
+                        html.Li("Diego Galván"),
+                        html.Li("Danna Isabella Gómez"),
+                    ], style={"fontSize": "18px"})
+                ], style={"width": "50%", "paddingRight": "20px"}),
+
+                # MAPA (DERECHA)
+                html.Div([
+                    dcc.Graph(
+                        id="mapa-cundinamarca",
+                        figure=px.choropleth(
+                            locations=["COL"],
+                            locationmode="ISO-3",
+                            color=[1],
+                            color_continuous_scale=[[0, "#2E86AB"], [1, "#2E86AB"]],
+                            scope="south america"
+                        ).update_layout(
+                            geo=dict(
+                                showland=True,
+                                landcolor="rgb(243,243,243)",
+                                showframe=False,
+                                showcoastlines=True,
+                            ),
+                            coloraxis_showscale=False,
+                            margin={"r": 0, "t": 0, "l": 0, "b": 0},
+                            height=350
+                        )
+                    )
+                ], style={"width": "50%"})
+
+            ], style={
+                "display": "flex",
+                "alignItems": "center",
+                "backgroundColor": "white",
+                "padding": "20px",
+                "borderRadius": "10px",
+                "boxShadow": "0px 2px 8px rgba(0,0,0,0.1)",
+                "marginBottom": "30px"
+            }),
+
+            # =========================================
+            # USUARIO FINAL + OBJETIVO
+            # =========================================
+            
+            html.Div([
+
+                # Usuario final
+                html.Div([
+                html.H4("Usuario final", style={"marginBottom": "10px"}),
+
+                html.P([
+                    html.Strong("DNP"),
+                    ":Departamento Nacional de Planeación. Entidad encargada de orientar la planeación nacional "
+                    "y la inversión pública, con interés en identificar brechas educativas y focalizar intervenciones."
+                ], style={"fontSize": "18px", "lineHeight": "1.6"}),
+
+                html.Br(),
+
+                html.H4("Relevancia", style={"marginBottom": "10px"}),
+
+                html.Ul([
+                    html.Li("Qué características del colegio predicen mejor el desempeño"),
+                    html.Li("Qué perfil socioeconómico se asocia a bajo rendimiento"),
+                    html.Li("Dónde focalizar intervenciones según brechas"),
+                ], style={"fontSize": "18px"})
+            ],
+            style={"width": "50%", "paddingRight": "10px"}),
+
+                ], style={
+                    "display": "flex",
+                    "backgroundColor": "white",
+                    "padding": "20px",
+                    "borderRadius": "10px",
+                    "boxShadow": "0px 2px 8px rgba(0,0,0,0.1)",
+                    "marginBottom": "20px"
+                }),   
+
+            # =========================================
+            # PREGUNTAS DE NEGOCIO
+            # =========================================
+            html.Div([
+                html.H4("Preguntas de negocio", style={"marginBottom": "10px"}),
+                html.Ul([
+                    html.Li([
+                        html.Strong("Pregunta 1 (Daniela): "),
+                        "¿Cuál será el nivel de desempeño en matemáticas de un estudiante de Cundinamarca "
+                        "según el tipo de colegio al que pertenece? ",
+                        html.Em("(Clasificación binaria: Alto vs No-Alto)")
+                    ]),
+                    html.Li([
+                        html.Strong("Pregunta 2 (Isabella): "),
+                        "¿Podemos predecir el puntaje global ICFES esperado de cada estudiante de grado 11 "
+                        "al iniciar el año escolar, en función de su perfil familiar, socioeconómico y del colegio? ",
+                        html.Em("(Regresión)")
+                    ]),
+                    html.Li([
+                        html.Strong("Pregunta 3 (Diego): "),
+                        "¿Qué estudiantes tienen alta probabilidad de bajo desempeño a pesar de pertenecer "
+                        "a contextos socioeconómicos favorables? ",
+                        html.Em("(Clasificación binaria)")
+                    ]),
+                ], style={"fontSize": "18px"})
             ], style={
                 "backgroundColor": "white",
                 "padding": "20px",
                 "borderRadius": "10px",
-                "boxShadow": "0 4px 12px rgba(0,0,0,0.05)",
-                "marginTop": "20px"
-            })
-
-        ], style={"flex": "1", "paddingLeft": "40px"})
-
-    ], style={
-        "display": "flex",
-        "gap": "40px",
-        "alignItems": "flex-start",
-        "marginTop": "30px"
-    }),
-]),
-
-        # ======================================================
-        # =================== PREGUNTA 2 ========================
-        # ======================================================
-
-        dcc.Tab(label="Pregunta 2", value="tab-2", children=[
-
-            html.Br(),
-            html.H3("Análisis Pregunta 2"),
-
-            html.Strong(
-                "¿En qué medida el acceso a computador e internet en el hogar explica " \
-                "las diferencias en el puntaje global de las pruebas Saber 11, una vez considerado " \
-                "el estrato socioeconómico, en Cundinamarca?" 
-                ""
-            ),
-
-            html.Br(),
-            html.P(
-                "Con esta pregunta, en particular, se busca establecer si los recursos tecnológicos "
-                "tienen un efecto propio sobre el desempeño académico, más allá de las desigualdades "
-                "estructurales asociadas al nivel socioeconómico."
-            ),
-
-            html.Br(),
-            html.H4("Análisis General del Puntaje Global"),
-
- html.Div([
-
-    # -------- COLUMNA IZQUIERDA (GRÁFICO) --------
-    html.Div([
-        dcc.Graph(id="histograma-general")
-    ], style={
-        'width': '65%',
-        'display': 'inline-block',
-        'verticalAlign': 'top'
-    }),
-
-    # -------- COLUMNA DERECHA (TEXTO + TABLA) --------
-    html.Div([
-
-        html.P(
-            "Del histograma notamos que la mayor concentración de estudiantes está entre 220 y 300 puntos, "
-            "con un pico alrededor de 250–270, lo que indica que ese es el rango típico de desempeño. "
-            "No se observan colas muy largas, lo que indica que no hay muchos estudiantes con puntajes "
-            "extremadamente bajos o extremadamente altos.",
-            style={"lineHeight": "1.8"}
-        ),
-
-        html.H5("Estadísticas Descriptivas",
-                style={
-                    "marginTop": "25px",
-                    "fontWeight": "bold"
-                }),
-
-        dash_table.DataTable(
-            data=stats_df.to_dict("records"),
-            columns=[{"name": i, "id": i} for i in stats_df.columns],
-            style_table={
-                "marginTop": "10px",
-                "width": "90%"   
-            },
-            style_cell={
-                "textAlign": "center",
-                "padding": "6px",     
-                "fontSize": "12px"    
-            },
-            style_header={
-                "backgroundColor": "#2E8B57",
-                "color": "white",
-                "fontWeight": "bold",
-                "fontSize": "12px"
-            },
-        )
-
-    ], style={
-        'width': '30%',
-        'display': 'inline-block',
-        'verticalAlign': 'top',
-        'paddingLeft': '40px'
-    })
-
-]),
-
-            html.P(
-                "Continuamos a analizar el comportamiento del puntaje global comparado con estrato"
-            ),
-            html.Br(),
-            html.H4("Puntaje Global vs Estrato"),
-
-
-            html.Div([
-
-                # TEXTO A LA IZQUIERDA
-                html.Div([
-
-                    html.P("Encontramos diferentes hallazgos: "), 
-                    html.Ul([
-                        html.Li("A mayor estrato socioeconómico, mayor mediana del puntaje global."),
-                        html.Li("Aunque existe una tendencia creciente, algunos estudiantes de estratos " \
-                        "bajos superan a estudiantes de estratos altos."),
-                        html.Li("El estrato parece ser un determinante estructural fuerte, dado el patrón sistemático " \
-                        "y consistente en todas las categorías."),
-                        html.Li("Mayor concentración en puntajes bajos en estratos 1 y 2," 
-                        "con densidad importante entre 200–250 puntos.")
-                    ]),
-
-                ], style={
-                    'width': '30%',
-                    'display': 'inline-block',
-                    'verticalAlign': 'top',
-                    'paddingRight': '40px'
-                }),
-
-                # GRÁFICO A LA DERECHA
-                html.Div([
-                    dcc.Graph(id="violin-estrato")
-                ], style={
-                    'width': '65%',
-                    'display': 'inline-block'
-                })
-
-            ]), 
-
-            html.Br(),
-
-            html.H4(id="titulo-heatmap"),
-
-            dcc.Slider(
-                id="slider-estrato",
-                min=int(df["FAMI_ESTRATOVIVIENDA"].min()),
-                max=int(df["FAMI_ESTRATOVIVIENDA"].max()),
-                step=1,
-                value=int(df["FAMI_ESTRATOVIVIENDA"].min()),
-                marks={
-                    int(e): str(int(e))
-                    for e in sorted(df["FAMI_ESTRATOVIVIENDA"].unique())
-                }
-            ),
-
-            html.Br(),
-
-            html.Div([
-
-                # HEATMAP
-                html.Div([
-                    dcc.Graph(id="heatmap-estrato")
-                ], style={
-                    'width': '65%',
-                    'display': 'inline-block'
-                }),
-
-                # TEXTO A LA DERECHA
-                html.Div([
-                    html.P("Los promedios por combinación de acceso tecnológico refuerzan este hallazgo. En el estrato 1, pasar de no tener acceso a contar con computador e internet implica una mejora cercana a 16 puntos en el puntaje global (de 237,5 a 253,4). En el estrato 6, la diferencia entre no tener acceso y tener ambos recursos supera los 100 puntos (de 216,7 a 323,4). En todos los estratos, la combinación de computador e internet se asocia con los puntajes más altos, lo que evidencia un efecto complementario entre ambos recursos. Estos resultados muestran que el acceso tecnológico incrementa el desempeño dentro de cada nivel socioeconómico, aunque no elimina la brecha estructural entre estratos. ")
-                ], style={
-                    'width': '30%',
-                    'display': 'inline-block',
-                    'verticalAlign': 'top',
-                    'paddingLeft': '40px'
-                })
-
-            ]),
-
-            html.Br(),
-
-            html.H4("Modelo de regresión"),
-
-            html.P(
-                "Para aislar el efecto del acceso tecnológico del efecto del estrato, "
-                "se estimó un modelo de regresión lineal en el que el puntaje global "
-                "se explicó en función de la tenencia de computador, el acceso a internet "
-                "y el estrato socioeconómico."
-            ),
-
-            html.Br(),
-
-            html.Div([
-
-    # -------- IZQUIERDA: RESULTADOS DEL MODELO --------
-    html.Div([
-
-        html.H4("Resultados del modelo de regresión",
-                style={"marginBottom": "15px"}),
-
-        html.Pre(
-    resumen_modelo,
-    style={
-        "whiteSpace": "pre-wrap",
-        "fontSize": "14px",          
-        "lineHeight": "1.6",         
-        "backgroundColor": "#f2f2f2",
-        "padding": "25px",
-        "borderRadius": "12px",
-        "boxShadow": "0 4px 12px rgba(0,0,0,0.08)",
-        "overflowX": "auto",
-        "border": "1px solid #e0e0e0"
-    }
-)
-
-    ], style={
-        "flex": "2"
-    }),
-
-    # -------- DERECHA: FORMULA + INTERPRETACION --------
-    html.Div([
-
-        # Fórmula destacada
-        html.Div(
-            "Puntaje Global = β₀ + β₁(Computador) + β₂(Internet) + β₃(Estrato) + ε",
-            style={
-                "fontSize": "20px",
-                "fontWeight": "bold",
-                "textAlign": "center",
-                "padding": "20px",
-                "backgroundColor": "white",
-                "borderRadius": "10px",
-                "boxShadow": "0 4px 12px rgba(0,0,0,0.05)"
-            }
-        ),
-
-        # Interpretación debajo
-        html.Div([
-
-            html.P(
-                "Los resultados indican que tanto el computador (+14,23 puntos) "
-                "como el internet (+8,86 puntos) tienen un efecto positivo y "
-                "estadísticamente significativo sobre el puntaje global (p < 0,001), "
-                "incluso después de controlar por estrato.",
-                style={"marginTop": "25px", "lineHeight": "1.7"}
-            ),
-
-            html.P(
-                "Además, el efecto del computador es mayor que el del internet, "
-                "lo que sugiere que la disponibilidad del dispositivo puede ser "
-                "más determinante que la conectividad por sí sola.",
-                style={"lineHeight": "1.7"}
-            ),
-
-            html.P(
-                "Por su parte, el estrato presenta un efecto fuerte y creciente: "
-                "en comparación con el estrato 1, los estudiantes del estrato 6 "
-                "obtienen en promedio 57,40 puntos adicionales, lo que confirma "
-                "la persistencia de desigualdades estructurales.",
-                style={"lineHeight": "1.7"}
-            )
-
-        ], style={
-            "backgroundColor": "white",
-            "padding": "20px",
-            "borderRadius": "10px",
-            "boxShadow": "0 4px 12px rgba(0,0,0,0.05)",
-            "marginTop": "20px"
-        })
-
-    ], style={
-        "flex": "1",
-        "paddingLeft": "40px"
-    })
-
-], style={
-    "display": "flex",
-    "gap": "40px",
-    "alignItems": "flex-start",
-    "marginTop": "30px"
-})
-                
-                    
-
-            
+                "boxShadow": "0px 2px 8px rgba(0,0,0,0.1)",
+                "marginBottom": "20px"
+            }),
 
         ]),
 
         # ======================================================
-        # =================== PREGUNTA 3 ========================
+        # PESTAÑA: PREGUNTA 1
         # ======================================================
+        dcc.Tab(label="Pregunta 1", value="tab-1", children=[
 
-# ======================================================
-# =================== PREGUNTA 3 ========================
-# ======================================================
-
-dcc.Tab(label="Pregunta 3", children=[
-
-    html.Br(),
-    html.H3("Análisis Pregunta 3"),
-    html.Strong(
-        "¿Qué dimensión del capital familiar (cultural vs económico) tiene mayor poder explicativo "
-        "sobre el desempeño en Saber 11?"
-    ),
-
-    html.Br(),
-    html.P(
-        "La narrativa sigue tres pasos: (1) explorar cada dimensión por separado, "
-        "(2) observar la interacción entre ambas con mapas de calor, "
-        "y (3) comparar modelos predictivos (R² test, ΔR² y R² parcial)."
-    ),
-
-    # -----------------------
-    # 1) Exploración: Cultura
-    # -----------------------
-    html.H4("1) Exploración por dimensión"),
-    html.Div([
-
-        html.Div([
-            html.H5("Capital cultural"),
-            html.P("Selecciona la variable cultural para ver el gradiente promedio del puntaje."),
-            dcc.Dropdown(
-                id="p3-cultura-var",
-                options=P3_CULTURE_OPTIONS,
-                value=P3_DEFAULT_CULTURE,
-                clearable=False
-            ),
-        ], style={"width": "30%", "display": "inline-block", "verticalAlign": "top", "paddingRight": "40px"}),
-
-        html.Div([
-            dcc.Graph(id="p3-graf-cultura")
-        ], style={"width": "65%", "display": "inline-block"}),
-
-    ]),
-
-    html.Br(),
-
-    # -----------------------
-    # 2) Exploración: Economía
-    # -----------------------
-    html.Div([
-
-        html.Div([
-            html.H5("Capital económico"),
-            html.P("Selecciona la variable económica para ver su relación con el puntaje promedio."),
-            dcc.Dropdown(
-                id="p3-econ-var",
-                options=P3_ECON_OPTIONS,
-                value=P3_DEFAULT_ECON,
-                clearable=False
-            ),
-        ], style={"width": "30%", "display": "inline-block", "verticalAlign": "top", "paddingRight": "40px"}),
-
-        html.Div([
-            dcc.Graph(id="p3-graf-economia")
-        ], style={"width": "65%", "display": "inline-block"}),
-
-    ]),
-
-    html.Br(),
-
-    # -----------------------
-    # 3) Heatmaps (2)
-    # -----------------------
-    html.H4("2) Interacción entre dimensiones (mapas de calor)"),
-    html.P(
-        "El primer mapa muestra el puntaje promedio por celda (Economía × Cultura). "
-        "El segundo muestra el tamaño muestral (N) por celda para evitar sobre-interpretar celdas pequeñas."
-    ),
-
-    html.Div([
-        html.Div([dcc.Graph(id="p3-heatmap-mean")], style={"width": "49%", "display": "inline-block"}),
-        html.Div([dcc.Graph(id="p3-heatmap-count")], style={"width": "49%", "display": "inline-block", "float": "right"}),
-    ]),
-
-    html.Br(),
-
-    # -----------------------
-    # 4) Modelos
-    # -----------------------
-    html.H4("3) Modelos comparativos (test)"),
-    html.P("Usamos un split train/test fijo para reportar R² en test y aportes incrementales (ΔR²)."),
-
-    html.Div([
-        html.Div([
-            html.Label("Test size (por defecto 0.20):"),
-            dcc.Slider(
-                id="p3-test-size",
-                min=0.1, max=0.4, step=0.05, value=0.2,
-                marks={0.1: "0.10", 0.2: "0.20", 0.3: "0.30", 0.4: "0.40"}
-            ),
             html.Br(),
-            html.Label("Random seed (por defecto 42):"),
-            dcc.Input(id="p3-seed", type="number", value=42, step=1),
+            html.H3("Pregunta 1 — Daniela Solarte"),
+
+            html.Strong(
+                "¿Cuál será el nivel de desempeño en matemáticas de un estudiante de Cundinamarca "
+                "según el tipo de colegio al que pertenece?"
+            ),
+
             html.Br(), html.Br(),
-            html.Button("Recalcular modelos", id="p3-calc-models", n_clicks=0),
-        ], style={"width": "30%", "display": "inline-block", "verticalAlign": "top", "paddingRight": "40px"}),
 
-        html.Div([
-
-            html.H5("R² en test"),
-            dash_table.DataTable(
-                id="p3-r2-table",
-                columns=[{"name": "Modelo", "id": "Modelo"}, {"name": "R2_test", "id": "R2_test"}],
-                data=[],
-                style_table={"overflowX": "auto"},
-                style_cell={"padding": "8px", "textAlign": "left"},
+            html.P(
+                "Se desarrolló un modelo de clasificación binaria basado en una red neuronal multicapa (MLP) "
+                "que predice si un estudiante obtendrá un desempeño Alto o No-Alto en matemáticas, "
+                "a partir de las características institucionales de su colegio."
             ),
 
+            # SECCIÓN 1: EXPLORACIÓN
+            html.Hr(),
+            html.H4("Exploración de datos"),
+
+            html.Div([
+                html.Div([
+                    html.Label("Tipo de jornada:"),
+                    dcc.Dropdown(
+                        id="p1-jornada",
+                        options=[
+                            {"label": "Todas",    "value": "Todas"},
+                            {"label": "Mañana",   "value": "COLE_JORNADA_MAÑANA"},
+                            {"label": "Completa", "value": "COLE_JORNADA_COMPLETA"},
+                            {"label": "Única",    "value": "COLE_JORNADA_UNICA"},
+                            {"label": "Tarde",    "value": "COLE_JORNADA_TARDE"},
+                            {"label": "Noche",    "value": "COLE_JORNADA_NOCHE"},
+                            {"label": "Sabatina", "value": "COLE_JORNADA_SABATINA"},
+                        ],
+                        value="Todas",
+                        clearable=False
+                    )
+                ], style={"width": "30%", "marginRight": "20px"}),
+
+                html.Div([
+                    html.Label("Tipo de colegio:"),
+                    dcc.Dropdown(
+                        id="p1-tipo",
+                        options=[
+                            {"label": "Todos",       "value": "Todos"},
+                            {"label": "Bilingüe",    "value": "bilingue"},
+                            {"label": "No bilingüe", "value": "no_bilingue"},
+                            {"label": "Urbano",      "value": "urbano"},
+                            {"label": "Rural",       "value": "rural"},
+                        ],
+                        value="Todos",
+                        clearable=False
+                    )
+                ], style={"width": "30%"}),
+
+            ], style={"display": "flex", "marginBottom": "20px"}),
+
+            html.Div([
+                html.Div([dcc.Graph(id="p1-bar-rendimiento")], style={"flex": "1"}),
+                html.Div([dcc.Graph(id="p1-violin-mat")],      style={"flex": "1"}),
+            ], style={"display": "flex", "gap": "20px"}),
+
             html.Br(),
-            html.H5("Aporte incremental y R² parcial"),
-            dash_table.DataTable(
-                id="p3-delta-table",
-                columns=[{"name": "Métrica", "id": "Métrica"}, {"name": "Valor", "id": "Valor"}],
-                data=[],
-                style_table={"overflowX": "auto"},
-                style_cell={"padding": "8px", "textAlign": "left"},
+
+            # SECCIÓN 2: PREDICCIÓN
+            html.Hr(),
+            html.H4("Predicción con red neuronal"),
+
+            html.P(
+                "Seleccione las características del colegio para predecir si sus estudiantes "
+                "tendrán un desempeño Alto o No-Alto en matemáticas."
             ),
 
-            html.Br(),
-            html.H5("Importancia relativa (coeficientes estandarizados)"),
-            dash_table.DataTable(
-                id="p3-beta-table",
-                columns=[{"name": "Variable", "id": "Variable"}, {"name": "Coef_estandarizado", "id": "Coef_estandarizado"}],
-                data=[],
-                style_table={"overflowX": "auto"},
-                style_cell={"padding": "8px", "textAlign": "left"},
-            ),
+            html.Div([
+
+                html.Div([
+
+                    html.Label("Área de ubicación:"),
+                    dcc.RadioItems(
+                        id="p1-area",
+                        options=[
+                            {"label": "Urbano", "value": 0},
+                            {"label": "Rural",  "value": 1},
+                        ],
+                        value=0,
+                        inline=True
+                    ),
+
+                    html.Br(),
+
+                    html.Label("¿Es bilingüe?"),
+                    dcc.RadioItems(
+                        id="p1-bilingue",
+                        options=[
+                            {"label": "Sí", "value": 1},
+                            {"label": "No", "value": 0},
+                        ],
+                        value=0,
+                        inline=True
+                    ),
+
+                    html.Br(),
+
+                    html.Label("Género del colegio:"),
+                    dcc.RadioItems(
+                        id="p1-genero",
+                        options=[
+                            {"label": "Mixto",     "value": "mixto"},
+                            {"label": "Femenino",  "value": "femenino"},
+                            {"label": "Masculino", "value": "masculino"},
+                        ],
+                        value="mixto",
+                        inline=True
+                    ),
+
+                    html.Br(),
+
+                    html.Label("Jornada escolar:"),
+                    dcc.Dropdown(
+                        id="p1-jornada-pred",
+                        options=[
+                            {"label": "Mañana",   "value": "mañana"},
+                            {"label": "Completa", "value": "completa"},
+                            {"label": "Única",    "value": "unica"},
+                            {"label": "Tarde",    "value": "tarde"},
+                            {"label": "Noche",    "value": "noche"},
+                            {"label": "Sabatina", "value": "sabatina"},
+                        ],
+                        value="mañana",
+                        clearable=False
+                    ),
+
+                    html.Br(),
+
+                    html.Label("Modelo a usar:"),
+                    dcc.RadioItems(
+                        id="p1-modelo-selector",
+                        options=[
+                            {"label": "MLP Base",       "value": "base"},
+                            {"label": "MLP Optimizada", "value": "opt"},
+                        ],
+                        value="opt",
+                        inline=True
+                    ),
+
+                    html.Br(),
+
+                    html.Button(
+                        "Predecir",
+                        id="p1-btn-predecir",
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": "#2E86AB",
+                            "color": "white",
+                            "border": "none",
+                            "padding": "10px 25px",
+                            "borderRadius": "8px",
+                            "fontSize": "18px",
+                            "cursor": "pointer"
+                        }
+                    ),
+
+                ], style={
+                    "flex": "1",
+                    "backgroundColor": "#f9f9f9",
+                    "padding": "25px",
+                    "borderRadius": "12px",
+                    "boxShadow": "0 4px 12px rgba(0,0,0,0.08)"
+                }),
+
+                html.Div([
+
+                    html.H4("Resultado de la predicción", style={"marginBottom": "15px"}),
+
+                    html.Div(id="p1-resultado", style={
+                        "fontSize": "22px",
+                        "fontWeight": "bold",
+                        "textAlign": "center",
+                        "padding": "30px",
+                        "borderRadius": "12px",
+                        "backgroundColor": "white",
+                        "boxShadow": "0 4px 12px rgba(0,0,0,0.08)",
+                        "marginBottom": "20px",
+                        "minHeight": "80px"
+                    }),
+
+                    dcc.Graph(id="p1-gauge"),
+
+                    html.Div(id="p1-interpretacion", style={
+                        "backgroundColor": "white",
+                        "padding": "20px",
+                        "borderRadius": "10px",
+                        "boxShadow": "0 4px 12px rgba(0,0,0,0.05)",
+                        "marginTop": "20px",
+                        "lineHeight": "1.7"
+                    }),
+
+                ], style={"flex": "1", "paddingLeft": "30px"}),
+
+            ], style={"display": "flex", "gap": "30px", "alignItems": "flex-start"}),
 
             html.Br(),
-            html.H5("Solapamiento (VIF)"),
-            dash_table.DataTable(
-                id="p3-vif-table",
-                columns=[{"name": "Variable", "id": "Variable"}, {"name": "VIF", "id": "VIF"}],
-                data=[],
-                style_table={"overflowX": "auto"},
-                style_cell={"padding": "8px", "textAlign": "left"},
-            ),
 
-            html.Br(),
-            html.P(id="p3-overlap-text", style={"lineHeight": "1.7"}),
+            # SECCIÓN 3: COMPARACIÓN DE MODELOS
+            html.Hr(),
+            html.H4("Comparación de modelos"),
 
-        ], style={"width": "65%", "display": "inline-block"}),
+            html.P("Se entrenaron dos arquitecturas MLP y se compararon usando F1-Score y AUC-ROC."),
 
-    ]),
+            html.Div([
+                html.Div([
+                    dash_table.DataTable(
+                        id="p1-tabla-modelos",
+                        columns=[
+                            {"name": "Modelo",      "id": "Modelo"},
+                            {"name": "Accuracy",    "id": "Accuracy"},
+                            {"name": "F1 Macro",    "id": "F1 Macro"},
+                            {"name": "AUC-ROC",     "id": "AUC-ROC"},
+                            {"name": "Arquitectura","id": "Arquitectura"},
+                        ],
+                        data=[
+                            {
+                                "Modelo":       "MLP Base",
+                                "Accuracy":     "—",
+                                "F1 Macro":     "—",
+                                "AUC-ROC":      "—",
+                                "Arquitectura": f"{len(CARACTERISTICAS_P1)}→64→32→1"
+                            },
+                            {
+                                "Modelo":       "MLP Optimizada",
+                                "Accuracy":     "—",
+                                "F1 Macro":     "—",
+                                "AUC-ROC":      "—",
+                                "Arquitectura": f"{len(CARACTERISTICAS_P1)}→64→32→1 + BN + Dropout"
+                            },
+                        ],
+                        style_cell={"textAlign": "center", "padding": "10px"},
+                        style_header={
+                            "backgroundColor": "#2E86AB",
+                            "color": "white",
+                            "fontWeight": "bold"
+                        },
+                        style_data_conditional=[{
+                            "if": {"row_index": "odd"},
+                            "backgroundColor": "#f2f9fc"
+                        }]
+                    )
+                ], style={"flex": "1"}),
 
-])
-])
+                html.Div([dcc.Graph(id="p1-comparacion-barras")], style={"flex": "1"}),
+
+            ], style={"display": "flex", "gap": "30px", "alignItems": "flex-start"}),
+
+        ]),
+
+        # Aquí irán Pregunta 2 y Pregunta 3...
 
     ])
-
-
-# ======================================================
-# CALLBACK PREGUNTA 1
-# ======================================================
+])
 
 # ======================================================
-# CALLBACK PREGUNTA 1 (Educación padres)
+# CALLBACKS PREGUNTA 1
 # ======================================================
 
 @app.callback(
-    Output("p1-violin", "figure"),
-    Output("p1-heatmap", "figure"),
-    Output("p1-reg-summary", "children"),
-    Input("p1-estratos", "value")
+    Output("p1-bar-rendimiento", "figure"),
+    Output("p1-violin-mat",      "figure"),
+    Input("p1-jornada",          "value"),
+    Input("p1-tipo",             "value"),
 )
-def actualizar_pregunta1(estratos_sel):
+def actualizar_exploracion_p1(jornada_sel, tipo_sel):
 
-    if not estratos_sel:
-        estratos_sel = estratos_disponibles_p1
+    dff = df.copy()
 
-    dff = df_p1[df_p1["ESTRATO_LABEL"].isin(estratos_sel)].copy()
+    if jornada_sel != "Todas":
+        dff = dff[dff[jornada_sel] == 1]
 
-    # ---------- 1) Violín (EDU_PADRES_CAT vs puntaje, coloreado por estrato) ----------
+    if tipo_sel == "bilingue":
+        dff = dff[dff["COLE_BILINGUE_NUM"] == 1]
+    elif tipo_sel == "no_bilingue":
+        dff = dff[dff["COLE_BILINGUE_NUM"] == 0]
+    elif tipo_sel == "urbano":
+        dff = dff[dff["COLE_AREA_UBICACION_NUM"] == 0]
+    elif tipo_sel == "rural":
+        dff = dff[dff["COLE_AREA_UBICACION_NUM"] == 1]
+
+    if dff.empty:
+        fig_vacia = px.bar(title="Sin datos para los filtros seleccionados")
+        return fig_vacia, fig_vacia
+
+    conteo = dff["ALTO_RENDIMIENTO"].value_counts().reset_index()
+    conteo.columns = ["Clase", "Cantidad"]
+    conteo["Clase"] = conteo["Clase"].map({1: "Alto", 0: "No-Alto"})
+    conteo["Porcentaje"] = (conteo["Cantidad"] / conteo["Cantidad"].sum() * 100).round(1)
+
+    fig_bar = px.bar(
+        conteo,
+        x="Clase",
+        y="Porcentaje",
+        color="Clase",
+        text="Porcentaje",
+        color_discrete_map={"Alto": "#2E86AB", "No-Alto": "#F5A623"},
+        title="Proporción de estudiantes Alto vs No-Alto en matemáticas"
+    )
+    fig_bar.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
+    fig_bar.update_layout(
+        template="simple_white",
+        yaxis_title="Porcentaje (%)",
+        xaxis_title="Nivel de desempeño",
+        showlegend=False,
+        yaxis_range=[0, 100]
+    )
+
+    dff_violin = dff.copy()
+    dff_violin["Nivel"] = dff_violin["ALTO_RENDIMIENTO"].map({1: "Alto", 0: "No-Alto"})
+
     fig_violin = px.violin(
-        dff,
-        x="EDU_PADRES_CAT",
-        y="PUNT_GLOBAL",
-        color="ESTRATO_LABEL",
+        dff_violin,
+        x="Nivel",
+        y="PUNT_MATEMATICAS",
+        color="Nivel",
         box=True,
         points=False,
-        category_orders={
-            "EDU_PADRES_CAT": ["Baja", "Media", "Alta"],
-            "ESTRATO_LABEL": estratos_disponibles_p1
-        },
-        title="Distribución del Puntaje Global por educación parental (comparando estratos)"
+        color_discrete_map={"Alto": "#2E86AB", "No-Alto": "#F5A623"},
+        title="Distribución del puntaje en matemáticas por nivel de desempeño"
     )
     fig_violin.update_layout(
         template="simple_white",
-        xaxis_title="Educación de los padres (categoría)",
-        yaxis_title="Puntaje Global",
-        legend_title="Estrato"
+        xaxis_title="Nivel de desempeño",
+        yaxis_title="Puntaje Matemáticas",
+        showlegend=False
     )
 
-    # ---------- 2) Heatmap (promedio + n) ----------
-    tabla_media = dff.pivot_table(
-        index="EDU_PADRES_CAT",
-        columns="ESTRATO_LABEL",
-        values="PUNT_GLOBAL",
-        aggfunc="mean"
-    )
-    tabla_n = dff.pivot_table(
-        index="EDU_PADRES_CAT",
-        columns="ESTRATO_LABEL",
-        values="PUNT_GLOBAL",
-        aggfunc="size"
-    ).fillna(0).astype(int)
+    return fig_bar, fig_violin
 
-    # Orden consistente
-    tabla_media = tabla_media.reindex(index=["Baja", "Media", "Alta"], columns=estratos_disponibles_p1)
-    tabla_n = tabla_n.reindex(index=["Baja", "Media", "Alta"], columns=estratos_disponibles_p1)
-
-    labels = tabla_media.round(1).astype(str) + "<br>(n=" + tabla_n.astype(str) + ")"
-
-    fig_heat = px.imshow(
-        tabla_media,
-        text_auto=False,
-        aspect="auto",
-        title="Promedio de Puntaje Global por educación parental y estrato"
-    )
-    fig_heat.update_traces(text=labels, texttemplate="%{text}")
-    fig_heat.update_layout(
-        template="simple_white",
-        xaxis_title="Estrato socioeconómico",
-        yaxis_title="Educación de los padres (categoría)",
-        coloraxis_colorbar=dict(title="Promedio Puntaje")
-    )
-
-    # ---------- 3) Regresión ----------
-    # PUNT_GLOBAL ~ FAMI_EDU_PADRES_SUM + C(estrato)
-    modelo1 = smf.ols(
-        "PUNT_GLOBAL ~ FAMI_EDU_PADRES_SUM + C(ESTRATO_LABEL)",
-        data=dff
-    ).fit()
-
-    return fig_violin, fig_heat, modelo1.summary().as_text()
-
-# ==============================
-# HISTOGRAMA MEJORADO
-# ==============================
 
 @app.callback(
-    Output("histograma-general", "figure"),
-    Input("histograma-general", "id")
+    Output("p1-resultado",      "children"),
+    Output("p1-resultado",      "style"),
+    Output("p1-gauge",          "figure"),
+    Output("p1-interpretacion", "children"),
+    Input("p1-btn-predecir",    "n_clicks"),
+    State("p1-area",            "value"),
+    State("p1-bilingue",        "value"),
+    State("p1-genero",          "value"),
+    State("p1-jornada-pred",    "value"),
+    State("p1-modelo-selector", "value"),
+    prevent_initial_call=True
 )
-def actualizar_histograma(_):
+def predecir_p1(n_clicks, area, bilingue, genero, jornada, modelo_sel):
 
-    fig = px.histogram(
-        df,
-        x="PUNT_GLOBAL",
-        nbins=40,
-        color_discrete_sequence=["lightgreen"]
-    )
+    genero_femenino  = 1 if genero == "femenino"  else 0
+    genero_masculino = 1 if genero == "masculino" else 0
+    genero_mixto     = 1 if genero == "mixto"     else 0
 
-    fig.update_layout(
-        template="simple_white",
-        title="Distribución del Puntaje Global",
-        xaxis_title="Puntaje Global",
-        yaxis_title="Frecuencia",
-        bargap=0.05
-    )
+    jornada_completa = 1 if jornada == "completa" else 0
+    jornada_manana   = 1 if jornada == "mañana"   else 0
+    jornada_noche    = 1 if jornada == "noche"    else 0
+    jornada_sabatina = 1 if jornada == "sabatina" else 0
+    jornada_tarde    = 1 if jornada == "tarde"    else 0
+    jornada_unica    = 1 if jornada == "unica"    else 0
 
-    return fig
+    es_privilegiado   = 1 if (bilingue == 1 and area == 0) else 0
+    jornada_extendida = 1 if (jornada_completa == 1 or jornada_unica == 1) else 0
+    colegio_no_mixto  = 1 if (genero_femenino == 1 or genero_masculino == 1) else 0
+    colegio_top       = 1 if (es_privilegiado == 1 and jornada_extendida == 1) else 0
 
+    fila = np.array([[
+        area, bilingue,
+        genero_femenino, genero_masculino, genero_mixto,
+        jornada_completa, jornada_manana, jornada_noche,
+        jornada_sabatina, jornada_tarde, jornada_unica,
+        es_privilegiado, jornada_extendida, colegio_no_mixto, colegio_top,
+    ]], dtype=np.float32)
 
-# ==============================
-# VIOLIN PLOT
-# ==============================
+    fila        = fila[:, :len(CARACTERISTICAS_P1)]
+    fila_scaled = scaler_p1.transform(fila)
+    modelo      = model_opt_p1 if modelo_sel == "opt" else model_base_p1
+    prob        = float(modelo.predict(fila_scaled, verbose=0).ravel()[0])
+    clase       = "Alto" if prob >= 0.5 else "No-Alto"
 
-@app.callback(
-    Output("violin-estrato", "figure"),
-    Input("violin-estrato", "id")
-)
-def actualizar_violin(_):
+    color_fondo = "#d4edda" if clase == "Alto" else "#fdecea"
+    color_texto = "#155724" if clase == "Alto" else "#721c24"
 
-    fig = px.violin(
-        df,
-        x="FAMI_ESTRATOVIVIENDA",
-        y="PUNT_GLOBAL",
-        box=True,
-        points=False,
-        color_discrete_sequence=["darkgreen"]
-    )
+    estilo_resultado = {
+        "fontSize": "22px",
+        "fontWeight": "bold",
+        "textAlign": "center",
+        "padding": "30px",
+        "borderRadius": "12px",
+        "backgroundColor": color_fondo,
+        "color": color_texto,
+        "boxShadow": "0 4px 12px rgba(0,0,0,0.08)",
+        "marginBottom": "20px",
+        "minHeight": "80px"
+    }
 
-    fig.update_layout(
-        template="simple_white",
-        title="Diagrama de Violín: Puntaje Global por Estrato",
-        xaxis_title="Estrato",
-        yaxis_title="Puntaje Global"
-    )
+    texto_resultado = f"Predicción: {clase}  |  Probabilidad Alto: {prob*100:.1f}%"
 
-    return fig
+    fig_gauge = {
+        "data": [{
+            "type": "indicator",
+            "mode": "gauge+number",
+            "value": round(prob * 100, 1),
+            "number": {"suffix": "%", "font": {"size": 28}},
+            "title": {"text": "Probabilidad de Alto desempeño", "font": {"size": 14}},
+            "gauge": {
+                "axis": {"range": [0, 100]},
+                "bar":  {"color": "#2E86AB"},
+                "steps": [
+                    {"range": [0,  50], "color": "#fdecea"},
+                    {"range": [50, 100], "color": "#d4edda"},
+                ],
+                "threshold": {
+                    "line":  {"color": "black", "width": 3},
+                    "thickness": 0.75,
+                    "value": 50
+                }
+            }
+        }],
+        "layout": {"height": 280, "margin": {"t": 40, "b": 10, "l": 20, "r": 20}}
+    }
 
-#-------------HEAT MAP----
+    nombre_modelo = "MLP Optimizada" if modelo_sel == "opt" else "MLP Base"
+    tipo_colegio  = "bilingüe" if bilingue == 1 else "no bilingüe"
+    area_label    = "urbano"   if area == 0    else "rural"
+    jornada_label = {
+        "mañana": "mañana", "completa": "completa", "unica": "única",
+        "tarde": "tarde",   "noche": "noche",       "sabatina": "sabatina"
+    }.get(jornada, jornada)
 
-@app.callback(
-    Output("titulo-heatmap", "children"),
-    Output("heatmap-estrato", "figure"),
-    Input("slider-estrato", "value")
-)
-def actualizar_heatmap(estrato):
-
-    df_e = df[df["FAMI_ESTRATOVIVIENDA"] == estrato]
-
-    tabla_heatmap = (
-        df_e.groupby(
-            ["FAMI_TIENECOMPUTADOR", "FAMI_TIENEINTERNET"]
-        )["PUNT_GLOBAL"]
-        .mean()
-        .unstack()
-    )
-
-    fig = px.imshow(
-        tabla_heatmap,
-        text_auto=".1f",
-        color_continuous_scale="YlGnBu",
-        aspect="auto"
-    )
-
-    fig.update_layout(
-        title=None,
-        xaxis_title="Tiene Internet",
-        yaxis_title="Tiene Computador",
-        coloraxis_colorbar=dict(
-            title="Puntaje Global Promedio"
+    interpretacion = html.Div([
+        html.P([html.Strong("Modelo usado: "), nombre_modelo]),
+        html.P([
+            html.Strong("Perfil del colegio: "),
+            f"{area_label.capitalize()}, {tipo_colegio}, jornada {jornada_label}, género {genero}."
+        ]),
+        html.P(
+            f"El modelo estima una probabilidad de {prob*100:.1f}% de que los estudiantes "
+            f"de este colegio alcancen un desempeño Alto en matemáticas."
         ),
-        template="simple_white"
-    )
+        html.P(
+            "Los colegios bilingües en jornada completa o única presentan consistentemente "
+            "mayor probabilidad de Alto desempeño según el análisis exploratorio."
+            if clase == "Alto" else
+            "Los colegios con jornada nocturna o sabatina y sin bilingüismo tienden a concentrar "
+            "los puntajes más bajos. Se recomienda focalizar intervenciones en estas instituciones."
+        ),
+    ])
 
-    return f"Mapa de Calor: Puntaje Global - Estrato {estrato}", fig
-
-# ======================================================
-# CALLBACKS PREGUNTA 3
-# ======================================================
-
-@app.callback(
-    Output("p3-graf-cultura", "figure"),
-    Output("p3-graf-economia", "figure"),
-    Output("p3-heatmap-mean", "figure"),
-    Output("p3-heatmap-count", "figure"),
-    Input("p3-cultura-var", "value"),
-    Input("p3-econ-var", "value")
-)
-def p3_actualizar_graficos(cultura_var, econ_var):
-    # df limpio asumido; igual filtramos por seguridad mínima
-    df_p3 = df.dropna(subset=["PUNT_GLOBAL", cultura_var, econ_var]).copy()
-
-    fig_cul = _p3_make_mean_line(
-        df_p3, cultura_var,
-        title=f"Capital cultural: Puntaje promedio vs {cultura_var}",
-        xlabel="Variable cultural"
-    )
-
-    fig_eco = _p3_make_mean_line(
-        df_p3, econ_var,
-        title=f"Capital económico: Puntaje promedio vs {econ_var}",
-        xlabel="Variable económica"
-    )
-
-    fig_hm_mean, fig_hm_n = _p3_make_heatmaps(df_p3, cultura_var, econ_var)
-
-    return fig_cul, fig_eco, fig_hm_mean, fig_hm_n
+    return texto_resultado, estilo_resultado, fig_gauge, interpretacion
 
 
 @app.callback(
-    Output("p3-r2-table", "data"),
-    Output("p3-delta-table", "data"),
-    Output("p3-beta-table", "data"),
-    Output("p3-vif-table", "data"),
-    Output("p3-overlap-text", "children"),
-    Input("p3-calc-models", "n_clicks"),
-    State("p3-test-size", "value"),
-    State("p3-seed", "value")
+    Output("p1-comparacion-barras", "figure"),
+    Input("p1-comparacion-barras",  "id")
 )
-def p3_actualizar_modelos(n_clicks, test_size, seed):
-    # Calcula incluso con n_clicks=0 (Dash llama el callback al cargar)
-    try:
-        tabla_r2, tabla_marginal, tabla_beta, tabla_vif, r2_overlap = _p3_compute_models(
-            df, test_size=float(test_size), random_state=int(seed)
-        )
+def grafica_comparacion_p1(_):
 
-        txt_overlap = (
-            f"Solapamiento cultura→economía: un modelo auxiliar sugiere que EDU_MAX_HOGAR explica "
-            f"aprox. {r2_overlap:.2%} de la variación del estrato. Esto indica que parte de la señal "
-            f"“económica” y “cultural” está estructuralmente solapada (interpretar ΔR² con cuidado)."
-        )
+    # Reemplaza estos valores con los reales de tu MLflow
+    datos = pd.DataFrame([
+        {"Modelo": "MLP Base",       "F1 Macro": 0.00, "AUC-ROC": 0.00, "Accuracy": 0.00},
+        {"Modelo": "MLP Optimizada", "F1 Macro": 0.00, "AUC-ROC": 0.00, "Accuracy": 0.00},
+    ])
 
-        return (
-            tabla_r2.to_dict("records"),
-            tabla_marginal.to_dict("records"),
-            tabla_beta.to_dict("records"),
-            tabla_vif.to_dict("records"),
-            txt_overlap
-        )
+    fig = px.bar(
+        datos.melt(id_vars="Modelo", var_name="Métrica", value_name="Valor"),
+        x="Métrica",
+        y="Valor",
+        color="Modelo",
+        barmode="group",
+        color_discrete_map={"MLP Base": "#4ABFBF", "MLP Optimizada": "#2E86AB"},
+        title="Comparación de métricas: MLP Base vs MLP Optimizada",
+        text_auto=".3f"
+    )
+    fig.update_layout(
+        template="simple_white",
+        yaxis_range=[0, 1],
+        yaxis_title="Valor",
+        legend_title="Modelo"
+    )
 
-    except Exception as e:
-        # Si algo falla, no revientes el Dash completo:
-        return dash.no_update, dash.no_update, dash.no_update, dash.no_update, f"Error al recalcular modelos: {e}"
+    return fig
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     app.run(debug=True)
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8055, debug=True)
-    
