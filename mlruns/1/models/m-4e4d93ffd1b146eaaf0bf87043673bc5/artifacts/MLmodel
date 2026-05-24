@@ -1,0 +1,22 @@
+artifact_path: "file:c:/Users/danis/OneDrive/Desktop/Anal\xEDtica/Proyecto2/Proyecto2Analitica/mlruns/1/models/m-4e4d93ffd1b146eaaf0bf87043673bc5/artifacts"
+flavors:
+  python_function:
+    data: data
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.tensorflow
+    python_version: 3.12.10
+  tensorflow:
+    code: null
+    data: data
+    keras_version: 2.20.0
+    model_type: keras
+    save_format: tf
+mlflow_version: 3.12.0
+model_id: m-4e4d93ffd1b146eaaf0bf87043673bc5
+model_size_bytes: 57840
+model_uuid: m-4e4d93ffd1b146eaaf0bf87043673bc5
+prompts: null
+run_id: e6be5c7e21244decb1da790aa2f73154
+utc_time_created: '2026-05-24 01:32:48.971644'
