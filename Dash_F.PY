@@ -73,155 +73,142 @@ stats_df["Valor"] = stats_df["Valor"].round(2)
 # Opcional: redondear
 stats_df["Valor"] = stats_df["Valor"].round(2)
 
+# # ======================================================
+# # PREGUNTA 3 — Helpers y validación de columnas (antes del layout)
+# # ======================================================
 
-# ==============================
-# PROMEDIO POR MUNICIPIO
-# ==============================
+# # Variables candidatas (solo se mostrarán las que existan)
+# P3_CULTURE_CANDIDATES = [
+#     ("Educación máxima del hogar", "EDU_MAX_HOGAR"),
+#     ("Educación madre", "FAMI_EDUCACIONMADRE"),
+#     ("Educación padre", "FAMI_EDUCACIONPADRE"),
+# ]
 
-df_mcpio = (
-    df.groupby("COLE_MCPIO_UBICACION")["PUNT_GLOBAL"]
-    .mean()
-    .reset_index()
-)
+# P3_ECON_CANDIDATES = [
+#     ("Estrato", "FAMI_ESTRATOVIVIENDA"),
+#     ("Índice de bienes del hogar", "INDICE_ECON"),
+# ]
 
-df_mcpio["ubicacion"] = df_mcpio["COLE_MCPIO_UBICACION"] + ", Colombia"
+# def _p3_existing_options(candidates):
+#     """Devuelve options Dash solo con columnas existentes."""
+#     opts = []
+#     for label, col in candidates:
+#         if col in df.columns:
+#             opts.append({"label": label, "value": col})
+#     return opts
 
-# ======================================================
-# PREGUNTA 3 — Helpers y validación de columnas (antes del layout)
-# ======================================================
+# P3_CULTURE_OPTIONS = _p3_existing_options(P3_CULTURE_CANDIDATES)
+# P3_ECON_OPTIONS = _p3_existing_options(P3_ECON_CANDIDATES)
 
-# Variables candidatas (solo se mostrarán las que existan)
-P3_CULTURE_CANDIDATES = [
-    ("Educación máxima del hogar", "EDU_MAX_HOGAR"),
-    ("Educación madre", "FAMI_EDUCACIONMADRE"),
-    ("Educación padre", "FAMI_EDUCACIONPADRE"),
-]
+# # Defaults razonables (si existen)
+# P3_DEFAULT_CULTURE = "EDU_MAX_HOGAR" if "EDU_MAX_HOGAR" in df.columns else P3_CULTURE_OPTIONS[0]["value"]
+# P3_DEFAULT_ECON = "FAMI_ESTRATOVIVIENDA" if "FAMI_ESTRATOVIVIENDA" in df.columns else P3_ECON_OPTIONS[0]["value"]
 
-P3_ECON_CANDIDATES = [
-    ("Estrato", "FAMI_ESTRATOVIVIENDA"),
-    ("Índice de bienes del hogar", "INDICE_ECON"),
-]
+# def _p3_make_mean_line(df_in, xvar, title, xlabel):
+#     g = df_in.groupby(xvar)["PUNT_GLOBAL"].mean().reset_index().sort_values(xvar)
+#     fig = px.line(g, x=xvar, y="PUNT_GLOBAL", markers=True, title=title)
+#     fig.update_layout(template="simple_white", xaxis_title=xlabel, yaxis_title="Puntaje global promedio")
+#     return fig
 
-def _p3_existing_options(candidates):
-    """Devuelve options Dash solo con columnas existentes."""
-    opts = []
-    for label, col in candidates:
-        if col in df.columns:
-            opts.append({"label": label, "value": col})
-    return opts
+# def _p3_group_edu(series):
+#     # Bins del notebook: Bajo (0-2), Medio (3-6), Alto (7-10)
+#     s = series.astype(float)
+#     return pd.cut(s, bins=[-1, 2, 6, 10], labels=["Bajo (0-2)", "Medio (3-6)", "Alto (7-10)"])
 
-P3_CULTURE_OPTIONS = _p3_existing_options(P3_CULTURE_CANDIDATES)
-P3_ECON_OPTIONS = _p3_existing_options(P3_ECON_CANDIDATES)
+# def _p3_group_econ(series, econ_var):
+#     s = series.astype(float)
+#     if econ_var == "FAMI_ESTRATOVIVIENDA":
+#         return pd.cut(s, bins=[0.5, 2.5, 4.5, 6.5], labels=["Bajo (1-2)", "Medio (3-4)", "Alto (5-6)"])
+#     # INDICE_ECON típico 0-4: Bajo (0-1), Medio (2-3), Alto (4+)
+#     return pd.cut(s, bins=[-1, 1.5, 3.5, 99], labels=["Bajo (0-1)", "Medio (2-3)", "Alto (4+)"])
 
-# Defaults razonables (si existen)
-P3_DEFAULT_CULTURE = "EDU_MAX_HOGAR" if "EDU_MAX_HOGAR" in df.columns else P3_CULTURE_OPTIONS[0]["value"]
-P3_DEFAULT_ECON = "FAMI_ESTRATOVIVIENDA" if "FAMI_ESTRATOVIVIENDA" in df.columns else P3_ECON_OPTIONS[0]["value"]
+# def _p3_make_heatmaps(df_in, cultura_var, econ_var):
+#     df_aux = df_in.copy()
+#     df_aux["EDU_G"] = _p3_group_edu(df_aux[cultura_var])
+#     df_aux["ECO_G"] = _p3_group_econ(df_aux[econ_var], econ_var)
 
-def _p3_make_mean_line(df_in, xvar, title, xlabel):
-    g = df_in.groupby(xvar)["PUNT_GLOBAL"].mean().reset_index().sort_values(xvar)
-    fig = px.line(g, x=xvar, y="PUNT_GLOBAL", markers=True, title=title)
-    fig.update_layout(template="simple_white", xaxis_title=xlabel, yaxis_title="Puntaje global promedio")
-    return fig
+#     hm_mean = df_aux.pivot_table(index="ECO_G", columns="EDU_G", values="PUNT_GLOBAL", aggfunc="mean")
+#     hm_n = df_aux.pivot_table(index="ECO_G", columns="EDU_G", values="PUNT_GLOBAL", aggfunc="count")
 
-def _p3_group_edu(series):
-    # Bins del notebook: Bajo (0-2), Medio (3-6), Alto (7-10)
-    s = series.astype(float)
-    return pd.cut(s, bins=[-1, 2, 6, 10], labels=["Bajo (0-2)", "Medio (3-6)", "Alto (7-10)"])
+#     fig_mean = px.imshow(hm_mean, text_auto=".1f", aspect="auto",
+#                          title="Mapa de calor (promedio): Puntaje por Economía × Cultura")
+#     fig_mean.update_layout(template="simple_white", xaxis_title="Cultura (grupo)", yaxis_title="Economía (grupo)")
 
-def _p3_group_econ(series, econ_var):
-    s = series.astype(float)
-    if econ_var == "FAMI_ESTRATOVIVIENDA":
-        return pd.cut(s, bins=[0.5, 2.5, 4.5, 6.5], labels=["Bajo (1-2)", "Medio (3-4)", "Alto (5-6)"])
-    # INDICE_ECON típico 0-4: Bajo (0-1), Medio (2-3), Alto (4+)
-    return pd.cut(s, bins=[-1, 1.5, 3.5, 99], labels=["Bajo (0-1)", "Medio (2-3)", "Alto (4+)"])
+#     fig_n = px.imshow(hm_n, text_auto=True, aspect="auto",
+#                       title="Mapa de calor (N observaciones): tamaño muestral por celda")
+#     fig_n.update_layout(template="simple_white", xaxis_title="Cultura (grupo)", yaxis_title="Economía (grupo)")
 
-def _p3_make_heatmaps(df_in, cultura_var, econ_var):
-    df_aux = df_in.copy()
-    df_aux["EDU_G"] = _p3_group_edu(df_aux[cultura_var])
-    df_aux["ECO_G"] = _p3_group_econ(df_aux[econ_var], econ_var)
+#     return fig_mean, fig_n
 
-    hm_mean = df_aux.pivot_table(index="ECO_G", columns="EDU_G", values="PUNT_GLOBAL", aggfunc="mean")
-    hm_n = df_aux.pivot_table(index="ECO_G", columns="EDU_G", values="PUNT_GLOBAL", aggfunc="count")
+# def _p3_compute_models(df_in, test_size=0.2, random_state=42):
+#     # Columnas “core” según tu notebook (cultura + economía + puntaje)
+#     required = ["PUNT_GLOBAL", "EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]
+#     dfm = df_in.dropna(subset=[c for c in required if c in df_in.columns]).copy()
 
-    fig_mean = px.imshow(hm_mean, text_auto=".1f", aspect="auto",
-                         title="Mapa de calor (promedio): Puntaje por Economía × Cultura")
-    fig_mean.update_layout(template="simple_white", xaxis_title="Cultura (grupo)", yaxis_title="Economía (grupo)")
+#     X_cul = dfm[["EDU_MAX_HOGAR"]].astype(float)
+#     X_eco = dfm[["FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]].astype(float)
+#     X_all = dfm[["EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]].astype(float)
+#     y = dfm["PUNT_GLOBAL"].astype(float)
 
-    fig_n = px.imshow(hm_n, text_auto=True, aspect="auto",
-                      title="Mapa de calor (N observaciones): tamaño muestral por celda")
-    fig_n.update_layout(template="simple_white", xaxis_title="Cultura (grupo)", yaxis_title="Economía (grupo)")
+#     # Split consistente (mismas filas para todos los modelos)
+#     idx = np.arange(len(dfm))
+#     idx_tr, idx_te = train_test_split(idx, test_size=test_size, random_state=random_state)
 
-    return fig_mean, fig_n
+#     m_cul = LinearRegression().fit(X_cul.iloc[idx_tr], y.iloc[idx_tr])
+#     m_eco = LinearRegression().fit(X_eco.iloc[idx_tr], y.iloc[idx_tr])
+#     m_all = LinearRegression().fit(X_all.iloc[idx_tr], y.iloc[idx_tr])
 
-def _p3_compute_models(df_in, test_size=0.2, random_state=42):
-    # Columnas “core” según tu notebook (cultura + economía + puntaje)
-    required = ["PUNT_GLOBAL", "EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]
-    dfm = df_in.dropna(subset=[c for c in required if c in df_in.columns]).copy()
+#     r2_cul = r2_score(y.iloc[idx_te], m_cul.predict(X_cul.iloc[idx_te]))
+#     r2_eco = r2_score(y.iloc[idx_te], m_eco.predict(X_eco.iloc[idx_te]))
+#     r2_all = r2_score(y.iloc[idx_te], m_all.predict(X_all.iloc[idx_te]))
 
-    X_cul = dfm[["EDU_MAX_HOGAR"]].astype(float)
-    X_eco = dfm[["FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]].astype(float)
-    X_all = dfm[["EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"]].astype(float)
-    y = dfm["PUNT_GLOBAL"].astype(float)
+#     tabla_r2 = pd.DataFrame({
+#         "Modelo": ["Cultural", "Económico (estrato + bienes)", "Conjunto"],
+#         "R2_test": [r2_cul, r2_eco, r2_all]
+#     }).round(4)
 
-    # Split consistente (mismas filas para todos los modelos)
-    idx = np.arange(len(dfm))
-    idx_tr, idx_te = train_test_split(idx, test_size=test_size, random_state=random_state)
+#     delta_cul = r2_all - r2_eco
+#     delta_eco = r2_all - r2_cul
 
-    m_cul = LinearRegression().fit(X_cul.iloc[idx_tr], y.iloc[idx_tr])
-    m_eco = LinearRegression().fit(X_eco.iloc[idx_tr], y.iloc[idx_tr])
-    m_all = LinearRegression().fit(X_all.iloc[idx_tr], y.iloc[idx_tr])
+#     r2_parcial_c = (r2_all - r2_eco) / (1 - r2_eco) if (1 - r2_eco) != 0 else np.nan
+#     r2_parcial_e = (r2_all - r2_cul) / (1 - r2_cul) if (1 - r2_cul) != 0 else np.nan
 
-    r2_cul = r2_score(y.iloc[idx_te], m_cul.predict(X_cul.iloc[idx_te]))
-    r2_eco = r2_score(y.iloc[idx_te], m_eco.predict(X_eco.iloc[idx_te]))
-    r2_all = r2_score(y.iloc[idx_te], m_all.predict(X_all.iloc[idx_te]))
+#     tabla_marginal = pd.DataFrame({
+#         "Métrica": [
+#             "ΔR2 (Cultura agregado a Económico)",
+#             "ΔR2 (Economía agregado a Cultural)",
+#             "R2 parcial Cultura",
+#             "R2 parcial Economía",
+#         ],
+#         "Valor": [delta_cul, delta_eco, r2_parcial_c, r2_parcial_e]
+#     }).round(4)
 
-    tabla_r2 = pd.DataFrame({
-        "Modelo": ["Cultural", "Económico (estrato + bienes)", "Conjunto"],
-        "R2_test": [r2_cul, r2_eco, r2_all]
-    }).round(4)
+#     # Betas estandarizados (modelo conjunto)
+#     scX = StandardScaler()
+#     scY = StandardScaler()
+#     Xz = scX.fit_transform(X_all.values)
+#     yz = scY.fit_transform(y.values.reshape(-1, 1)).ravel()
 
-    delta_cul = r2_all - r2_eco
-    delta_eco = r2_all - r2_cul
+#     Xz_tr, Xz_te, yz_tr, yz_te = train_test_split(Xz, yz, test_size=test_size, random_state=random_state)
+#     mz = LinearRegression().fit(Xz_tr, yz_tr)
 
-    r2_parcial_c = (r2_all - r2_eco) / (1 - r2_eco) if (1 - r2_eco) != 0 else np.nan
-    r2_parcial_e = (r2_all - r2_cul) / (1 - r2_cul) if (1 - r2_cul) != 0 else np.nan
+#     tabla_beta = pd.DataFrame({
+#         "Variable": ["EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"],
+#         "Coef_estandarizado": mz.coef_
+#     }).sort_values("Coef_estandarizado", ascending=False).round(4)
 
-    tabla_marginal = pd.DataFrame({
-        "Métrica": [
-            "ΔR2 (Cultura agregado a Económico)",
-            "ΔR2 (Economía agregado a Cultural)",
-            "R2 parcial Cultura",
-            "R2 parcial Economía",
-        ],
-        "Valor": [delta_cul, delta_eco, r2_parcial_c, r2_parcial_e]
-    }).round(4)
+#     # VIF (colinealidad)
+#     X_vif = sm.add_constant(X_all)
+#     tabla_vif = pd.DataFrame({
+#         "Variable": X_vif.columns,
+#         "VIF": [variance_inflation_factor(X_vif.values, i) for i in range(X_vif.shape[1])]
+#     }).round(3)
 
-    # Betas estandarizados (modelo conjunto)
-    scX = StandardScaler()
-    scY = StandardScaler()
-    Xz = scX.fit_transform(X_all.values)
-    yz = scY.fit_transform(y.values.reshape(-1, 1)).ravel()
+#     # Solapamiento: cuánto EDU_MAX explica estrato (como en tu notebook)
+#     reg_aux = LinearRegression().fit(dfm[["EDU_MAX_HOGAR"]].astype(float), dfm["FAMI_ESTRATOVIVIENDA"].astype(float))
+#     r2_overlap = reg_aux.score(dfm[["EDU_MAX_HOGAR"]].astype(float), dfm["FAMI_ESTRATOVIVIENDA"].astype(float))
 
-    Xz_tr, Xz_te, yz_tr, yz_te = train_test_split(Xz, yz, test_size=test_size, random_state=random_state)
-    mz = LinearRegression().fit(Xz_tr, yz_tr)
-
-    tabla_beta = pd.DataFrame({
-        "Variable": ["EDU_MAX_HOGAR", "FAMI_ESTRATOVIVIENDA", "INDICE_ECON"],
-        "Coef_estandarizado": mz.coef_
-    }).sort_values("Coef_estandarizado", ascending=False).round(4)
-
-    # VIF (colinealidad)
-    X_vif = sm.add_constant(X_all)
-    tabla_vif = pd.DataFrame({
-        "Variable": X_vif.columns,
-        "VIF": [variance_inflation_factor(X_vif.values, i) for i in range(X_vif.shape[1])]
-    }).round(3)
-
-    # Solapamiento: cuánto EDU_MAX explica estrato (como en tu notebook)
-    reg_aux = LinearRegression().fit(dfm[["EDU_MAX_HOGAR"]].astype(float), dfm["FAMI_ESTRATOVIVIENDA"].astype(float))
-    r2_overlap = reg_aux.score(dfm[["EDU_MAX_HOGAR"]].astype(float), dfm["FAMI_ESTRATOVIVIENDA"].astype(float))
-
-    return tabla_r2, tabla_marginal, tabla_beta, tabla_vif, float(r2_overlap)
+#     return tabla_r2, tabla_marginal, tabla_beta, tabla_vif, float(r2_overlap)
 # ==============================
 # LAYOUT
 # ==============================
