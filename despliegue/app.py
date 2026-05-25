@@ -639,9 +639,9 @@ app.layout = html.Div([
             html.Br(),
             html.Label("Área del colegio:"),
             dcc.Dropdown(id="p2-area",
-                options=[{"label": "Urbano", "value": "Urbano"},
-                         {"label": "Rural", "value": "Rural"}],
-                value="Urbano", clearable=False),
+                options=[{"label": "Urbano", "value": "URBANO"},
+                         {"label": "Rural", "value": "RURAL"}],
+                value="URBANO", clearable=False),
             html.Br(),
             html.Label("¿Colegio bilingüe?"),
             dcc.Dropdown(id="p2-bilingue",
@@ -970,35 +970,37 @@ def predecir_puntaje(n_clicks, genero, area, bilingue, cole_genero,
     scaler_p2 = joblib.load("scaler_p2.pkl")
     encoder_p2 = joblib.load("encoder_p2.pkl")
 
-    # Orden exacto del encoder
     cols_encoder = ['COLE_AREA_UBICACION', 'COLE_BILINGUE', 'COLE_GENERO',
                     'COLE_MCPIO_UBICACION', 'ESTU_GENERO', 'FAMI_CUARTOSHOGAR',
                     'FAMI_EDUCACIONMADRE', 'FAMI_EDUCACIONPADRE', 'FAMI_ESTRATOVIVIENDA',
                     'FAMI_PERSONASHOGAR', 'FAMI_TIENEAUTOMOVIL', 'FAMI_TIENECOMPUTADOR',
                     'FAMI_TIENEINTERNET', 'FAMI_TIENELAVADORA']
 
-    # Orden exacto del scaler
     cols_scaler = ['PERIODO', 'COLE_AREA_UBICACION', 'COLE_BILINGUE', 'COLE_GENERO',
                    'COLE_MCPIO_UBICACION', 'ESTU_GENERO', 'FAMI_CUARTOSHOGAR',
                    'FAMI_EDUCACIONMADRE', 'FAMI_EDUCACIONPADRE', 'FAMI_ESTRATOVIVIENDA',
                    'FAMI_PERSONASHOGAR', 'FAMI_TIENEAUTOMOVIL', 'FAMI_TIENECOMPUTADOR',
                    'FAMI_TIENEINTERNET', 'FAMI_TIENELAVADORA']
 
-    # Crear dataframe con orden del encoder
+    # Crear input para encoder
     input_encoder = pd.DataFrame([[
-        area, bilingue, cole_genero, "Zipaquirá", genero,
-        "3 a 5", "Secundaria (Bachillerato)", "Secundaria (Bachillerato)",
-        "Estrato " + str(estrato), "5 a 6",
+        area, bilingue, cole_genero, "ZIPAQUIRÁ", genero,
+        "Tres",
+        "Secundaria (Bachillerato) completa",
+        "Secundaria (Bachillerato) completa",
+        "Estrato " + str(estrato),
+        "3 a 4",
         automovil, computador, internet, "Si"
     ]], columns=cols_encoder)
 
     # Codificar
-    input_encoded = encoder_p2.transform(input_encoder)
-    input_encoded_df = pd.DataFrame(input_encoded, columns=cols_encoder)
-
-    # Agregar PERIODO y reordenar para el scaler
-    input_encoded_df['PERIODO'] = 2019
-    input_scaler = input_encoded_df[cols_scaler]
+    encoded_values = encoder_p2.transform(input_encoder)
+    
+    # Crear DataFrame con orden del scaler
+    input_scaler = pd.DataFrame(
+        [[2019] + list(encoded_values[0])],
+        columns=cols_scaler
+    )
 
     # Escalar y predecir
     input_scaled = scaler_p2.transform(input_scaler)
