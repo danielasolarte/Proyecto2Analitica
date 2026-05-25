@@ -7,6 +7,15 @@ import numpy as np
 import joblib
 import keras
 
+import joblib
+import numpy as np
+from tensorflow.keras.models import load_model
+
+# Cargar modelo pregunta 2
+modelo_p2 = load_model("modelo_p2.keras")
+scaler_p2 = joblib.load("scaler_p2.pkl")
+encoder_p2 = joblib.load("encoder_p2.pkl")
+
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
@@ -611,6 +620,93 @@ app.layout = html.Div([
             }),
 
         ]),
+        #####Fin Pregunta 1#####
+        dcc.Tab(label="Predicción P2 - MLP", value="tab-pred2", children=[
+
+    html.Br(),
+    html.H3("Predicción de Puntaje Global ICFES"),
+    html.P("Ingresa el perfil del estudiante para estimar su puntaje global ICFES."),
+
+    html.Div([
+
+        html.Div([
+            html.Label("Género del estudiante:"),
+            dcc.Dropdown(id="p2-genero",
+                options=[{"label": "Femenino", "value": "F"},
+                         {"label": "Masculino", "value": "M"}],
+                value="F", clearable=False),
+            html.Br(),
+            html.Label("Área del colegio:"),
+            dcc.Dropdown(id="p2-area",
+                options=[{"label": "Urbano", "value": "Urbano"},
+                         {"label": "Rural", "value": "Rural"}],
+                value="Urbano", clearable=False),
+            html.Br(),
+            html.Label("¿Colegio bilingüe?"),
+            dcc.Dropdown(id="p2-bilingue",
+                options=[{"label": "Sí", "value": "S"},
+                         {"label": "No", "value": "N"}],
+                value="N", clearable=False),
+            html.Br(),
+            html.Label("Género del colegio:"),
+            dcc.Dropdown(id="p2-cole-genero",
+                options=[{"label": "Mixto", "value": "MIXTO"},
+                         {"label": "Femenino", "value": "FEMENINO"},
+                         {"label": "Masculino", "value": "MASCULINO"}],
+                value="MIXTO", clearable=False),
+            html.Br(),
+            html.Label("Estrato socioeconómico:"),
+            dcc.Slider(id="p2-estrato", min=1, max=6, step=1, value=2,
+                marks={i: str(i) for i in range(1, 7)}),
+            html.Br(),
+            html.Label("¿Tiene internet en casa?"),
+            dcc.Dropdown(id="p2-internet",
+                options=[{"label": "Sí", "value": "Si"},
+                         {"label": "No", "value": "No"}],
+                value="Si", clearable=False),
+            html.Br(),
+            html.Label("¿Tiene computador en casa?"),
+            dcc.Dropdown(id="p2-computador",
+                options=[{"label": "Sí", "value": "Si"},
+                         {"label": "No", "value": "No"}],
+                value="Si", clearable=False),
+            html.Br(),
+            html.Label("¿Tiene automóvil?"),
+            dcc.Dropdown(id="p2-automovil",
+                options=[{"label": "Sí", "value": "Si"},
+                         {"label": "No", "value": "No"}],
+                value="No", clearable=False),
+            html.Br(),
+            html.Label("Número de personas en el hogar:"),
+            dcc.Slider(id="p2-personas", min=1, max=10, step=1, value=4,
+                marks={i: str(i) for i in range(1, 11)}),
+            html.Br(),
+            html.Button("Predecir Puntaje", id="p2-btn", n_clicks=0,
+                style={"backgroundColor": "#2E8B57", "color": "white",
+                       "padding": "10px 20px", "border": "none",
+                       "borderRadius": "5px", "cursor": "pointer",
+                       "fontSize": "16px"})
+        ], style={"width": "45%", "display": "inline-block",
+                  "verticalAlign": "top", "paddingRight": "40px"}),
+
+        html.Div([
+            html.H4("Resultado:"),
+            html.Div(id="p2-resultado",
+                style={"fontSize": "48px", "fontWeight": "bold",
+                       "color": "#2E8B57", "textAlign": "center",
+                       "padding": "40px", "backgroundColor": "white",
+                       "borderRadius": "10px",
+                       "boxShadow": "0 4px 12px rgba(0,0,0,0.1)"}),
+            html.Br(),
+            html.Div(id="p2-interpretacion",
+                style={"textAlign": "center", "fontSize": "16px",
+                       "color": "#555"})
+        ], style={"width": "45%", "display": "inline-block",
+                  "verticalAlign": "top"})
+
+    ], style={"marginTop": "20px"})
+]),
+
 
         ###############Aquí irán Pregunta 2 y Pregunta 3..#############
 
@@ -849,6 +945,59 @@ def grafica_comparacion_p1(_):
 
 
     return fig
+
+@app.callback(
+    Output("p2-resultado", "children"),
+    Output("p2-interpretacion", "children"),
+    Input("p2-btn", "n_clicks"),
+    State("p2-genero", "value"),
+    State("p2-area", "value"),
+    State("p2-bilingue", "value"),
+    State("p2-cole-genero", "value"),
+    State("p2-estrato", "value"),
+    State("p2-internet", "value"),
+    State("p2-computador", "value"),
+    State("p2-automovil", "value"),
+    State("p2-personas", "value"),
+    prevent_initial_call=True
+)
+def predecir_puntaje(n_clicks, genero, area, bilingue, cole_genero,
+                     estrato, internet, computador, automovil, personas):
+
+    from tensorflow.keras.models import load_model
+    modelo_p2 = load_model("modelo_p2.keras")
+    scaler_p2 = joblib.load("scaler_p2.pkl")
+    encoder_p2 = joblib.load("encoder_p2.pkl")
+
+    input_data = pd.DataFrame([[
+        genero, area, bilingue, cole_genero,
+        "Zipaquirá",
+        estrato, personas, computador, automovil,
+        internet, "Si", 2019
+    ]], columns=[
+        'ESTU_GENERO', 'COLE_AREA_UBICACION', 'COLE_BILINGUE',
+        'COLE_GENERO', 'COLE_MCPIO_UBICACION',
+        'FAMI_ESTRATOVIVIENDA', 'FAMI_PERSONASHOGAR',
+        'FAMI_TIENECOMPUTADOR', 'FAMI_TIENEAUTOMOVIL',
+        'FAMI_TIENEINTERNET', 'FAMI_TIENELAVADORA', 'PERIODO'
+    ])
+
+    cols_cat = input_data.select_dtypes(include=['object']).columns
+    input_data[cols_cat] = encoder_p2.transform(input_data[cols_cat])
+    input_scaled = scaler_p2.transform(input_data)
+
+    puntaje = modelo_p2.predict(input_scaled)[0][0]
+    puntaje = round(float(puntaje), 1)
+
+    if puntaje < 200:
+        interpretacion = "⚠️ Riesgo alto — se recomienda intervención temprana"
+    elif puntaje < 280:
+        interpretacion = "📊 Desempeño medio esperado — monitoreo recomendado"
+    else:
+        interpretacion = "✅ Buen desempeño esperado"
+
+    return f"{puntaje} pts", interpretacion
+
 
 
 if __name__ == '__main__':
