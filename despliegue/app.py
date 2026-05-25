@@ -969,21 +969,42 @@ def predecir_puntaje(n_clicks, genero, area, bilingue, cole_genero,
     scaler_p2 = joblib.load("scaler_p2.pkl")
     encoder_p2 = joblib.load("encoder_p2.pkl")
 
+    # Columnas categóricas — van al encoder
+    cols_cat = ['ESTU_GENERO', 'COLE_AREA_UBICACION', 'COLE_BILINGUE',
+                'COLE_GENERO', 'COLE_MCPIO_UBICACION', 'FAMI_TIENEAUTOMOVIL',
+                'FAMI_TIENECOMPUTADOR', 'FAMI_TIENEINTERNET', 'FAMI_TIENELAVADORA',
+                'FAMI_EDUCACIONMADRE', 'FAMI_EDUCACIONPADRE', 'FAMI_ESTRATOVIVIENDA',
+                'FAMI_CUARTOSHOGAR', 'FAMI_PERSONASHOGAR']
+
     input_data = pd.DataFrame([[
-        genero, area, bilingue, cole_genero,
-        "Zipaquirá",
-        estrato, personas, computador, automovil,
-        internet, "Si", 2019
+        genero,          # ESTU_GENERO
+        area,            # COLE_AREA_UBICACION
+        bilingue,        # COLE_BILINGUE
+        cole_genero,     # COLE_GENERO
+        "Zipaquirá",     # COLE_MCPIO_UBICACION
+        "3 a 5",         # FAMI_CUARTOSHOGAR
+        "Secundaria (Bachillerato)", # FAMI_EDUCACIONMADRE
+        "Secundaria (Bachillerato)", # FAMI_EDUCACIONPADRE
+        "Estrato 3",     # FAMI_ESTRATOVIVIENDA
+        "5 a 6",         # FAMI_PERSONASHOGAR
+        automovil,       # FAMI_TIENEAUTOMOVIL
+        computador,      # FAMI_TIENECOMPUTADOR
+        internet,        # FAMI_TIENEINTERNET
+        "Si",            # FAMI_TIENELAVADORA
+        2019             # PERIODO
     ]], columns=[
         'ESTU_GENERO', 'COLE_AREA_UBICACION', 'COLE_BILINGUE',
         'COLE_GENERO', 'COLE_MCPIO_UBICACION',
+        'FAMI_CUARTOSHOGAR', 'FAMI_EDUCACIONMADRE', 'FAMI_EDUCACIONPADRE',
         'FAMI_ESTRATOVIVIENDA', 'FAMI_PERSONASHOGAR',
-        'FAMI_TIENECOMPUTADOR', 'FAMI_TIENEAUTOMOVIL',
+        'FAMI_TIENEAUTOMOVIL', 'FAMI_TIENECOMPUTADOR',
         'FAMI_TIENEINTERNET', 'FAMI_TIENELAVADORA', 'PERIODO'
     ])
 
-    cols_cat = input_data.select_dtypes(include=['object']).columns
-    input_data[cols_cat] = encoder_p2.transform(input_data[cols_cat])
+    # Codificar todas las categóricas
+    cat_cols_present = input_data.select_dtypes(include=['object']).columns
+    input_data[cat_cols_present] = encoder_p2.transform(input_data[cat_cols_present])
+    input_data = input_data.astype(float)
     input_scaled = scaler_p2.transform(input_data)
 
     puntaje = modelo_p2.predict(input_scaled)[0][0]
