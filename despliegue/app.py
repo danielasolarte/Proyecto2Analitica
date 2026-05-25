@@ -625,87 +625,167 @@ app.layout = html.Div([
         dcc.Tab(label="Predicción P2 - MLP", value="tab-pred2", children=[
 
     html.Br(),
-    html.H3("Predicción de Puntaje Global ICFES"),
-    html.P("Ingresa el perfil del estudiante para estimar su puntaje global ICFES."),
+    html.H3("¿Podemos predecir el puntaje global ICFES según el perfil familiar, socioeconómico y del colegio?"),
+    html.P("Modelo de regresión MLP — Danna Isabella Gómez Lozano"),
 
+    # == SECCIÓN 1: EXPLORACIÓN ==
     html.Div([
+        html.H4("1. Exploración de datos"),
 
         html.Div([
-            html.Label("Género del estudiante:"),
-            dcc.Dropdown(id="p2-genero",
-                options=[{"label": "Femenino", "value": "F"},
-                         {"label": "Masculino", "value": "M"}],
-                value="F", clearable=False),
-            html.Br(),
-            html.Label("Área del colegio:"),
-            dcc.Dropdown(id="p2-area",
-                options=[{"label": "Urbano", "value": "URBANO"},
-                         {"label": "Rural", "value": "RURAL"}],
-                value="URBANO", clearable=False),
-            html.Br(),
-            html.Label("¿Colegio bilingüe?"),
-            dcc.Dropdown(id="p2-bilingue",
-                options=[{"label": "Sí", "value": "S"},
-                         {"label": "No", "value": "N"}],
-                value="N", clearable=False),
-            html.Br(),
-            html.Label("Género del colegio:"),
-            dcc.Dropdown(id="p2-cole-genero",
-                options=[{"label": "Mixto", "value": "MIXTO"},
-                         {"label": "Femenino", "value": "FEMENINO"},
-                         {"label": "Masculino", "value": "MASCULINO"}],
-                value="MIXTO", clearable=False),
-            html.Br(),
-            html.Label("Estrato socioeconómico:"),
-            dcc.Slider(id="p2-estrato", min=1, max=6, step=1, value=2,
-                marks={i: str(i) for i in range(1, 7)}),
-            html.Br(),
-            html.Label("¿Tiene internet en casa?"),
-            dcc.Dropdown(id="p2-internet",
-                options=[{"label": "Sí", "value": "Si"},
-                         {"label": "No", "value": "No"}],
-                value="Si", clearable=False),
-            html.Br(),
-            html.Label("¿Tiene computador en casa?"),
-            dcc.Dropdown(id="p2-computador",
-                options=[{"label": "Sí", "value": "Si"},
-                         {"label": "No", "value": "No"}],
-                value="Si", clearable=False),
-            html.Br(),
-            html.Label("¿Tiene automóvil?"),
-            dcc.Dropdown(id="p2-automovil",
-                options=[{"label": "Sí", "value": "Si"},
-                         {"label": "No", "value": "No"}],
-                value="No", clearable=False),
-            html.Br(),
-            html.Label("Número de personas en el hogar:"),
-            dcc.Slider(id="p2-personas", min=1, max=10, step=1, value=4,
-                marks={i: str(i) for i in range(1, 11)}),
-            html.Br(),
-            html.Button("Predecir Puntaje", id="p2-btn", n_clicks=0,
-                style={"backgroundColor": "#2E8B57", "color": "white",
-                       "padding": "10px 20px", "border": "none",
-                       "borderRadius": "5px", "cursor": "pointer",
-                       "fontSize": "16px"})
-        ], style={"width": "45%", "display": "inline-block",
-                  "verticalAlign": "top", "paddingRight": "40px"}),
+            # Histograma PUNT_GLOBAL
+            html.Div([
+                dcc.Graph(id="p2-hist-global")
+            ], style={"width": "50%", "display": "inline-block"}),
+
+            # Correlaciones
+            html.Div([
+                dcc.Graph(id="p2-corr")
+            ], style={"width": "50%", "display": "inline-block"}),
+        ]),
 
         html.Div([
-            html.H4("Resultado:"),
-            html.Div(id="p2-resultado",
-                style={"fontSize": "48px", "fontWeight": "bold",
-                       "color": "#2E8B57", "textAlign": "center",
-                       "padding": "40px", "backgroundColor": "white",
-                       "borderRadius": "10px",
-                       "boxShadow": "0 4px 12px rgba(0,0,0,0.1)"}),
-            html.Br(),
-            html.Div(id="p2-interpretacion",
-                style={"textAlign": "center", "fontSize": "16px",
-                       "color": "#555"})
-        ], style={"width": "45%", "display": "inline-block",
-                  "verticalAlign": "top"})
+            # Boxplot por estrato
+            html.Div([
+                dcc.Graph(id="p2-estrato-box")
+            ], style={"width": "50%", "display": "inline-block"}),
 
-    ], style={"marginTop": "20px"})
+            # Boxplot por internet
+            html.Div([
+                dcc.Graph(id="p2-internet-box")
+            ], style={"width": "50%", "display": "inline-block"}),
+        ]),
+
+    ], style={"backgroundColor": "white", "padding": "20px",
+              "borderRadius": "10px", "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+              "marginBottom": "20px"}),
+
+    # == SECCIÓN 2: RESULTADOS DEL MODELO ==
+    html.Div([
+        html.H4("2. Resultados del modelo"),
+
+        html.P("Se entrenaron y compararon 3 arquitecturas MLP. La siguiente tabla resume los resultados:"),
+
+        dash_table.DataTable(
+            columns=[
+                {"name": "Experimento", "id": "exp"},
+                {"name": "Arquitectura", "id": "arq"},
+                {"name": "MAE", "id": "mae"},
+                {"name": "RMSE", "id": "rmse"},
+                {"name": "R²", "id": "r2"},
+            ],
+            data=[
+                {"exp": "Exp 1 - Baseline ✅", "arq": "64→32→1", "mae": "32.97", "rmse": "40.89", "r2": "0.210"},
+                {"exp": "Exp 2 - Profunda", "arq": "128→64→32→1", "mae": "33.27", "rmse": "41.24", "r2": "0.197"},
+                {"exp": "Exp 3 - Regularización", "arq": "128→64→32→1 + Dropout + BN", "mae": "33.50", "rmse": "41.56", "r2": "0.184"},
+            ],
+            style_cell={"textAlign": "center", "padding": "10px", "fontSize": "14px"},
+            style_header={"backgroundColor": "#2E86AB", "color": "white", "fontWeight": "bold"},
+            style_data_conditional=[
+                {"if": {"row_index": 0}, "backgroundColor": "#d4edda", "color": "#155724"}
+            ]
+        ),
+
+        html.Br(),
+        html.P([
+            html.Strong("Modelo seleccionado: "), "Experimento 1 (Baseline 64→32→1) — mejor MAE (32.97), RMSE (40.89) y R² (0.210). ",
+            "El R² moderado es esperado dado que las variables socioeconómicas disponibles no capturan factores pedagógicos ",
+            "como dedicación al estudio o calidad del docente."
+        ], style={"fontSize": "14px", "color": "#555", "backgroundColor": "#fff8e1",
+                  "padding": "12px", "borderRadius": "8px", "border": "1px solid #ffe082"})
+
+    ], style={"backgroundColor": "white", "padding": "20px",
+              "borderRadius": "10px", "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+              "marginBottom": "20px"}),
+
+    # == SECCIÓN 3: PREDICCIÓN INTERACTIVA ==
+    html.Div([
+        html.H4("3. Predicción interactiva"),
+        html.P("Ingresa el perfil del estudiante para estimar su puntaje global ICFES."),
+
+        html.Div([
+
+            html.Div([
+                html.Label("Género del estudiante:"),
+                dcc.Dropdown(id="p2-genero",
+                    options=[{"label": "Femenino", "value": "F"},
+                             {"label": "Masculino", "value": "M"}],
+                    value="F", clearable=False),
+                html.Br(),
+                html.Label("Área del colegio:"),
+                dcc.Dropdown(id="p2-area",
+                    options=[{"label": "Urbano", "value": "URBANO"},
+                             {"label": "Rural", "value": "RURAL"}],
+                    value="URBANO", clearable=False),
+                html.Br(),
+                html.Label("¿Colegio bilingüe?"),
+                dcc.Dropdown(id="p2-bilingue",
+                    options=[{"label": "Sí", "value": "S"},
+                             {"label": "No", "value": "N"}],
+                    value="N", clearable=False),
+                html.Br(),
+                html.Label("Género del colegio:"),
+                dcc.Dropdown(id="p2-cole-genero",
+                    options=[{"label": "Mixto", "value": "MIXTO"},
+                             {"label": "Femenino", "value": "FEMENINO"},
+                             {"label": "Masculino", "value": "MASCULINO"}],
+                    value="MIXTO", clearable=False),
+                html.Br(),
+                html.Label("Estrato socioeconómico:"),
+                dcc.Slider(id="p2-estrato", min=1, max=6, step=1, value=2,
+                    marks={i: str(i) for i in range(1, 7)}),
+                html.Br(),
+                html.Label("¿Tiene internet en casa?"),
+                dcc.Dropdown(id="p2-internet",
+                    options=[{"label": "Sí", "value": "Si"},
+                             {"label": "No", "value": "No"}],
+                    value="Si", clearable=False),
+                html.Br(),
+                html.Label("¿Tiene computador en casa?"),
+                dcc.Dropdown(id="p2-computador",
+                    options=[{"label": "Sí", "value": "Si"},
+                             {"label": "No", "value": "No"}],
+                    value="Si", clearable=False),
+                html.Br(),
+                html.Label("¿Tiene automóvil?"),
+                dcc.Dropdown(id="p2-automovil",
+                    options=[{"label": "Sí", "value": "Si"},
+                             {"label": "No", "value": "No"}],
+                    value="No", clearable=False),
+                html.Br(),
+                html.Label("Número de personas en el hogar:"),
+                dcc.Slider(id="p2-personas", min=1, max=10, step=1, value=4,
+                    marks={i: str(i) for i in range(1, 11)}),
+                html.Br(),
+                html.Button("Predecir Puntaje", id="p2-btn", n_clicks=0,
+                    style={"backgroundColor": "#2E8B57", "color": "white",
+                           "padding": "10px 20px", "border": "none",
+                           "borderRadius": "5px", "cursor": "pointer",
+                           "fontSize": "16px"})
+            ], style={"width": "45%", "display": "inline-block",
+                      "verticalAlign": "top", "paddingRight": "40px"}),
+
+            html.Div([
+                html.H4("Resultado:"),
+                html.Div(id="p2-resultado",
+                    style={"fontSize": "48px", "fontWeight": "bold",
+                           "color": "#2E8B57", "textAlign": "center",
+                           "padding": "40px", "backgroundColor": "white",
+                           "borderRadius": "10px",
+                           "boxShadow": "0 4px 12px rgba(0,0,0,0.1)"}),
+                html.Br(),
+                html.Div(id="p2-interpretacion",
+                    style={"textAlign": "center", "fontSize": "16px",
+                           "color": "#555"})
+            ], style={"width": "45%", "display": "inline-block",
+                      "verticalAlign": "top"})
+
+        ], style={"marginTop": "20px"})
+
+    ], style={"backgroundColor": "white", "padding": "20px",
+              "borderRadius": "10px", "boxShadow": "0 2px 8px rgba(0,0,0,0.1)",
+              "marginBottom": "20px"}),
+
 ]),
 
 
@@ -998,7 +1078,7 @@ def predecir_puntaje(n_clicks, genero, area, bilingue, cole_genero,
     
     # Crear DataFrame con orden del scaler
     input_scaler = pd.DataFrame(
-        [[2019] + list(encoded_values[0])],
+        [[20191] + list(encoded_values[0])],
         columns=cols_scaler
     )
 
@@ -1016,7 +1096,51 @@ def predecir_puntaje(n_clicks, genero, area, bilingue, cole_genero,
 
     return f"{puntaje} pts", interpretacion
 
+# Callbacks gráficas P2
+@app.callback(
+    Output("p2-hist-global", "figure"),
+    Output("p2-corr", "figure"),
+    Output("p2-estrato-box", "figure"),
+    Output("p2-internet-box", "figure"),
+    Input("p2-hist-global", "id")
+)
+def graficas_p2(_):
+    df_p2 = pd.read_csv("df_p2_graficas.csv")
 
+    # Histograma
+    fig_hist = px.histogram(df_p2, x="PUNT_GLOBAL", nbins=50,
+        title="Distribución de PUNT_GLOBAL",
+        color_discrete_sequence=["#2E86AB"])
+    fig_hist.update_layout(template="simple_white",
+        xaxis_title="Puntaje Global", yaxis_title="Frecuencia")
+
+    # Correlaciones
+    df_num = df_p2.copy()
+    for col in df_num.select_dtypes(include='object').columns:
+        df_num[col] = pd.Categorical(df_num[col]).codes
+    corr = df_num.corr()["PUNT_GLOBAL"].drop("PUNT_GLOBAL").sort_values()
+    fig_corr = px.bar(x=corr.values, y=corr.index, orientation='h',
+        title="Correlación con PUNT_GLOBAL",
+        color=corr.values,
+        color_continuous_scale=["salmon", "steelblue"])
+    fig_corr.update_layout(template="simple_white",
+        xaxis_title="Correlación", yaxis_title="")
+
+    # Boxplot estrato
+    fig_estrato = px.box(df_p2, x="FAMI_ESTRATOVIVIENDA", y="PUNT_GLOBAL",
+        title="PUNT_GLOBAL por Estrato",
+        color_discrete_sequence=["#2E86AB"])
+    fig_estrato.update_layout(template="simple_white",
+        xaxis_title="Estrato", yaxis_title="Puntaje Global")
+
+    # Boxplot internet
+    fig_internet = px.box(df_p2, x="FAMI_TIENEINTERNET", y="PUNT_GLOBAL",
+        title="PUNT_GLOBAL por Acceso a Internet",
+        color_discrete_sequence=["#4ABFBF"])
+    fig_internet.update_layout(template="simple_white",
+        xaxis_title="Tiene Internet", yaxis_title="Puntaje Global")
+
+    return fig_hist, fig_corr, fig_estrato, fig_internet
 
 if __name__ == '__main__':
     app.run(debug=True)
