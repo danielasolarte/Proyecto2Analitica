@@ -4,7 +4,8 @@ import plotly.express as px
 import pandas as pd
 from dash import dash_table
 import numpy as np
-
+import json
+from pathlib import Path
 import joblib
 import keras
 
@@ -17,7 +18,70 @@ modelo_p2 = load_model("modelo_p2.keras")
 scaler_p2 = joblib.load("scaler_p2.pkl")
 encoder_p2 = joblib.load("encoder_p2.pkl")
 
+BASE_DIR = Path(__file__).resolve().parent
+
+def asset(nombre):
+    return BASE_DIR / nombre
+
+
+df_p3 = pd.read_csv(
+    asset("df_modelo_preg3.csv")
+)
+
+modelo_p3 = load_model(
+    asset("modelo_preg3_final.keras")
+)
+
+scaler_p3 = joblib.load(
+    asset("scaler_preg3.pkl")
+)
+
+feature_columns_p3 = joblib.load(
+    asset("feature_columns_p3.pkl")
+)
+import json
+
+with open(
+    asset("metricas_p3.json"),
+    "r",
+    encoding="utf-8"
+) as f:
+
+    metricas_p3 = json.load(f)
+
+
+
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+def kpi_card(
+    titulo,
+    valor
+):
+
+    return html.Div([
+
+        html.Div(
+            titulo,
+            style={
+                "fontSize":"13px",
+                "color":"gray"
+            }
+        ),
+
+        html.Div(
+            valor,
+            style={
+                "fontSize":"28px",
+                "fontWeight":"700",
+                "color":"#2E86AB"
+            }
+        )
+
+    ], style={
+        "backgroundColor":"white",
+        "padding":"18px",
+        "borderRadius":"14px",
+        "boxShadow":"0 4px 16px rgba(0,0,0,0.06)"
+    })
 
 app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
@@ -790,6 +854,355 @@ app.layout = html.Div([
 
 
         ###############Aquí irán Pregunta 2 y Pregunta 3..#############
+       dcc.Tab(label="Pregunta 3", value="tab-pred3", children=[
+
+    html.Br(),
+
+    html.Div([
+
+        html.H3(
+            "¿Qué estudiantes tienen alta probabilidad de bajo desempeño a pesar de pertenecer a contextos socioeconómicos favorables?",
+            style={
+                "fontSize":"24px",
+                "fontWeight":"700",
+                "marginBottom":"8px"
+            }
+        ),
+
+        html.P(
+            "Esta sección identifica estudiantes con riesgo oculto: perfiles con contexto favorable "
+            "pero alta probabilidad de bajo desempeño según el modelo.",
+            style={
+                "fontSize":"15px",
+                "color":"#555"
+            }
+        )
+
+    ], style={
+        "backgroundColor":"white",
+        "padding":"22px",
+        "borderRadius":"14px",
+        "boxShadow":"0 4px 16px rgba(0,0,0,0.06)",
+        "marginBottom":"18px"
+    }),
+    
+
+    html.Div([
+
+        html.Div([
+
+            html.Div(
+                "Objetivo",
+                style={
+                    "fontSize":"13px",
+                    "color":"gray"
+                }
+            ),
+
+            html.Div(
+                "Detectar riesgo oculto",
+                style={
+                    "fontSize":"18px",
+                    "fontWeight":"700",
+                    "color":"#8B2E2E"
+                }
+            )
+
+        ], style={
+            "flex":"1",
+            "padding":"16px",
+            "backgroundColor":"#fff7f7",
+            "borderRadius":"12px"
+        }),
+
+        html.Div([
+
+            html.Div(
+                "Uso",
+                style={
+                    "fontSize":"13px",
+                    "color":"gray"
+                }
+            ),
+
+            html.Div(
+                "Priorizar seguimiento",
+                style={
+                    "fontSize":"18px",
+                    "fontWeight":"700",
+                    "color":"#2E86AB"
+                }
+            )
+
+        ], style={
+            "flex":"1",
+            "padding":"16px",
+            "backgroundColor":"#f4fbff",
+            "borderRadius":"12px"
+        })
+
+    ], style={
+        "display":"flex",
+        "gap":"15px",
+        "marginBottom":"18px"
+    }),
+    html.Div([
+
+    kpi_card(
+        "Accuracy",
+        f"{metricas_p3['accuracy']*100:.1f}%"
+    ),
+
+    kpi_card(
+        "Precision",
+        f"{metricas_p3['precision']*100:.1f}%"
+    ),
+
+    kpi_card(
+        "Recall",
+        f"{metricas_p3['recall']*100:.1f}%"
+    ),
+
+    kpi_card(
+        "F1",
+        f"{metricas_p3['f1']*100:.1f}%"
+    ),
+
+    kpi_card(
+        "AUC",
+        f"{metricas_p3['auc']*100:.1f}%"
+    )
+
+], style={
+    "display":"grid",
+    "gridTemplateColumns":"repeat(5,1fr)",
+    "gap":"12px",
+    "marginBottom":"18px"
+}),
+
+    html.Div([
+
+        html.Div([
+
+            html.H4(
+                "Exploración del riesgo"
+            ),
+
+            dcc.Graph(
+                id="p3-bar-estrato",
+                config={
+                    "displayModeBar":False
+                }
+            )
+
+        ], style={
+            "width":"48%",
+            "backgroundColor":"white",
+            "padding":"18px",
+            "borderRadius":"14px",
+            "boxShadow":"0 4px 16px rgba(0,0,0,0.06)"
+        }),
+
+        html.Div([
+
+            html.H4(
+                "Riesgo por contexto"
+            ),
+
+            dcc.Graph(
+                id="p3-bar-contexto",
+                config={
+                    "displayModeBar":False
+                }
+            )
+
+        ], style={
+            "width":"48%",
+            "backgroundColor":"white",
+            "padding":"18px",
+            "borderRadius":"14px",
+            "boxShadow":"0 4px 16px rgba(0,0,0,0.06)"
+        })
+
+    ], style={
+        "display":"flex",
+        "gap":"18px",
+        "marginBottom":"18px"
+    }),
+
+    html.Div([
+
+        html.Div([
+
+            html.H4(
+                "Perfil del estudiante",
+                style={
+                    "color":"#2E86AB"
+                }
+            ),
+
+            html.Label(
+                "Área colegio"
+            ),
+
+            dcc.Dropdown(
+                id="p3-area",
+                options=[
+                    {
+                        "label":"Urbano",
+                        "value":"URBANO"
+                    },
+                    {
+                        "label":"Rural",
+                        "value":"RURAL"
+                    }
+                ],
+                value="URBANO",
+                clearable=False
+            ),
+
+            html.Br(),
+
+            html.Label(
+                "Colegio bilingüe"
+            ),
+
+            dcc.Dropdown(
+                id="p3-bilingue",
+                options=[
+                    {
+                        "label":"Sí",
+                        "value":"S"
+                    },
+                    {
+                        "label":"No",
+                        "value":"N"
+                    }
+                ],
+                value="N",
+                clearable=False
+            ),
+
+            html.Br(),
+
+            html.Label(
+                "Estrato"
+            ),
+
+            dcc.Slider(
+                id="p3-estrato",
+                min=1,
+                max=6,
+                step=1,
+                value=4,
+                marks={
+                    i:str(i)
+                    for i in range(1,7)
+                }
+            ),
+
+            html.Br(),
+
+            html.Label(
+                "Internet"
+            ),
+
+            dcc.Dropdown(
+                id="p3-internet",
+                options=[
+                    {
+                        "label":"Sí",
+                        "value":"Si"
+                    },
+                    {
+                        "label":"No",
+                        "value":"No"
+                    }
+                ],
+                value="Si",
+                clearable=False
+            ),
+
+            html.Br(),
+
+            html.Button(
+
+                "PREDECIR RIESGO",
+
+                id="p3-btn",
+
+                n_clicks=0,
+
+                style={
+                    "width":"100%",
+                    "backgroundColor":"#8B2E2E",
+                    "color":"white",
+                    "padding":"12px",
+                    "border":"none",
+                    "borderRadius":"10px",
+                    "fontWeight":"700"
+                }
+
+            )
+
+        ], style={
+            "width":"38%",
+            "backgroundColor":"white",
+            "padding":"22px",
+            "borderRadius":"14px",
+            "boxShadow":"0 4px 16px rgba(0,0,0,0.06)"
+        }),
+
+        html.Div([
+
+            html.H4(
+                "Resultado",
+                style={
+                    "color":"#2E86AB"
+                }
+            ),
+
+            html.Div(
+
+                id="p3-resultado",
+
+                style={
+                    "fontSize":"30px",
+                    "fontWeight":"700",
+                    "textAlign":"center",
+                    "padding":"18px",
+                    "backgroundColor":"#fff7f7",
+                    "borderRadius":"12px",
+                    "marginBottom":"15px"
+                }
+
+            ),
+
+            dcc.Graph(
+                id="p3-gauge",
+                config={
+                    "displayModeBar":False
+                }
+            ),
+
+            html.Div(
+                id="p3-interpretacion"
+            )
+
+        ], style={
+            "width":"60%",
+            "backgroundColor":"white",
+            "padding":"22px",
+            "borderRadius":"14px",
+            "boxShadow":"0 4px 16px rgba(0,0,0,0.06)"
+        })
+
+    ], style={
+        "display":"flex",
+        "gap":"18px"
+    })
+
+]),
 
     ])
 ])
@@ -1141,6 +1554,227 @@ def graficas_p2(_):
         xaxis_title="Tiene Internet", yaxis_title="Puntaje Global")
 
     return fig_hist, fig_corr, fig_estrato, fig_internet
+@app.callback(
+    Output(
+        "p3-bar-estrato",
+        "figure"
+    ),
+
+    Output(
+        "p3-bar-contexto",
+        "figure"
+    ),
+
+    Input(
+        "p3-bar-estrato",
+        "id"
+    )
+
+)
+def graficas_p3(_):
+
+    dff = df_p3.copy()
+
+    target = "RIESGO_OCULTO"
+
+
+    riesgo_estrato = (
+
+        dff.groupby(
+            "FAMI_ESTRATOVIVIENDA"
+        )[target]
+
+        .mean()
+
+        .reset_index()
+
+    )
+
+    fig1 = px.bar(
+
+        riesgo_estrato,
+
+        x="FAMI_ESTRATOVIVIENDA",
+
+        y=target,
+
+        title="Riesgo medio según estrato",
+
+        text_auto=".1%"
+
+    )
+
+    fig1.update_layout(
+
+        template="simple_white",
+
+        xaxis_title="Estrato",
+
+        yaxis_title="Proporción riesgo",
+
+        title_font_size=18
+
+    )
+
+
+    contexto = (
+
+        dff[
+            [
+                "COLE_BILINGUE",
+                "FAMI_TIENEINTERNET",
+                "FAMI_TIENECOMPUTADOR",
+                target
+            ]
+        ]
+
+        .copy()
+
+    )
+
+    contexto["score"] = (
+
+        (contexto["COLE_BILINGUE"]=="S").astype(int)
+
+        +
+
+        (contexto["FAMI_TIENEINTERNET"]=="Si").astype(int)
+
+        +
+
+        (contexto["FAMI_TIENECOMPUTADOR"]=="Si").astype(int)
+
+    )
+
+
+    riesgo_contexto = (
+
+        contexto.groupby(
+            "score"
+        )[target]
+
+        .mean()
+
+        .reset_index()
+
+    )
+
+
+    fig2 = px.line(
+
+        riesgo_contexto,
+
+        x="score",
+
+        y=target,
+
+        markers=True,
+
+        title="Riesgo según contexto favorable"
+
+    )
+
+    fig2.update_layout(
+
+        template="simple_white",
+
+        xaxis_title="Nivel contexto favorable",
+
+        yaxis_title="Proporción riesgo",
+
+        title_font_size=18
+
+    )
+
+    return fig1, fig2
+
+
+@app.callback(
+    Output("p3-resultado", "children"),
+    Output("p3-gauge", "figure"),
+    Output("p3-interpretacion", "children"),
+    Input("p3-btn", "n_clicks"),
+    State("p3-area", "value"),
+    State("p3-bilingue", "value"),
+    State("p3-estrato", "value"),
+    State("p3-internet", "value"),
+    prevent_initial_call=True
+)
+def predecir_p3(n_clicks, area, bilingue, estrato, internet):
+
+    input_df = pd.DataFrame([{
+        "COLE_AREA_UBICACION": area,
+        "COLE_BILINGUE": bilingue,
+        "FAMI_ESTRATOVIVIENDA": f"Estrato {estrato}",
+        "FAMI_TIENEINTERNET": internet,
+    }])
+
+    X = pd.get_dummies(input_df)
+
+    if feature_columns_p3 is not None:
+        X = X.reindex(columns=feature_columns_p3, fill_value=0)
+
+    X_scaled = scaler_p3.transform(X)
+    prob = float(modelo_p3.predict(X_scaled, verbose=0).ravel()[0])
+    riesgo_pct = round(prob * 100, 1)
+
+    if prob >= 0.70:
+        nivel = "RIESGO ALTO"
+        color_caja = "#fdecea"
+        color_texto = "#8B2E2E"
+        mensaje = "Conviene priorizar seguimiento académico."
+    elif prob >= 0.40:
+        nivel = "RIESGO MEDIO"
+        color_caja = "#fff4d6"
+        color_texto = "#8a6d3b"
+        mensaje = "Hay señales de alerta, pero no es un caso extremo."
+    else:
+        nivel = "RIESGO BAJO"
+        color_caja = "#dff3e3"
+        color_texto = "#1f6b3a"
+        mensaje = "El perfil no sugiere alarma inmediata."
+
+    fig_gauge = {
+        "data": [{
+            "type": "indicator",
+            "mode": "gauge+number",
+            "value": riesgo_pct,
+            "number": {"suffix": "%", "font": {"size": 30}},
+            "title": {"text": "Probabilidad de bajo desempeño", "font": {"size": 14}},
+            "gauge": {
+                "axis": {"range": [0, 100]},
+                "bar": {"color": "#8B2E2E"},
+                "steps": [
+                    {"range": [0, 40], "color": "#dff3e3"},
+                    {"range": [40, 70], "color": "#fff4d6"},
+                    {"range": [70, 100], "color": "#fdecea"},
+                ],
+                "threshold": {
+                    "line": {"color": "black", "width": 3},
+                    "thickness": 0.75,
+                    "value": 70
+                }
+            }
+        }],
+        "layout": {
+            "height": 280,
+            "margin": {"t": 30, "b": 10, "l": 20, "r": 20}
+        }
+    }
+
+    interpretacion = html.Div([
+        html.Div(nivel, style={"fontWeight": "800", "marginBottom": "8px"}),
+        html.Div(f"Probabilidad estimada: {riesgo_pct:.1f}%.", style={"marginBottom": "6px"}),
+        html.Div(mensaje),
+    ], style={
+        "backgroundColor": color_caja,
+        "color": color_texto,
+        "padding": "16px",
+        "borderRadius": "14px",
+        "border": "1px solid rgba(0,0,0,0.06)"
+    })
+
+    return f"{nivel} — {riesgo_pct:.1f}%", fig_gauge, interpretacion
 
 if __name__ == '__main__':
     app.run(debug=True)
